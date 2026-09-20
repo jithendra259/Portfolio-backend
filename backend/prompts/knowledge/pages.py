@@ -460,6 +460,19 @@ def get_section_knowledge(target: str) -> Optional[dict[str, Any]]:
     if route_key in PAGE_KNOWLEDGE:
         return PAGE_KNOWLEDGE[route_key]
 
+    # Case-study navigation targets → canonical /projects/* routes
+    case_study_routes = {
+        "case_study_adaptive_governance": "/projects/adaptive-portfolio-governance",
+        "case_study_regime_supervisory": "/projects/regime-adaptive-supervisory-governance",
+        "case_study_supervisory_xai": "/projects/supervisory-portfolio-xai-governance",
+        "case_study_voice_architecture": "/projects/voice-agent-portfolio-architecture",
+        "case_study_aqi": "/projects/personalised-aqi-system",
+        "case_study_swarm_robotics": "/projects/swarm-robots-agriculture",
+    }
+    cs_route = case_study_routes.get(clean)
+    if cs_route and cs_route in PAGE_KNOWLEDGE:
+        return PAGE_KNOWLEDGE[cs_route]
+
     # Alias normalization
     aliases = {
         "contact_section": "contact",
