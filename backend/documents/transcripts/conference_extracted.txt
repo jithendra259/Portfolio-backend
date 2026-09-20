@@ -1,0 +1,618 @@
+Regime-Adaptive Supervisory Governance for
+Instability-Aware Portfolio Stabilization
+K. J. Subramanyam1[0009-0005-7593-7871]*, Sunayana Vilas
+Jadhav1[0000-0001-5405-9743], and Ashwini Dalvi1[0000-0001-9015-457X]
+K.J. Somaiya School of Engineering, Somaiya Vidyavihar University, Mumbai 400077,
+India
+kandulajithendrasubramanyam@gmail.com
+sunayanavj@somaiya.edu
+ashwinidalvi@somaiya.edu
+*Corresponding author: K. J. Subramanyam,
+kandulajithendrasubramanyam@gmail.com
+Abstract. Portfolio optimization performs best when the risk structure
+used to construct a portfolio is reasonably stable. However, in stressed
+market regimes, covariance relationships, volatility levels, and cross-asset
+correlations can move in tandem, making conventional allocation rules
+less robust. In this paper, we propose an interpretable regime-adaptive
+supervisory governance framework for portfolio stabilization during mar-
+ket instability. The proposed framework integrates covariance drift, rolling
+volatility, and correlation stress into a general instability index and flex-
+ibly adjusts governance through concentration limits and regularization
+strength. Instead of switching allocation models, the approach uses a
+unified optimization framework to adapt governance behavior as insta-
+bility increases. We empirically test the framework on 18 liquid U.S.
+stocks from 2005 to 2025 and find that it maintains broad diversifica-
+tion, slightly improves selected downside-risk measures relative to equal
+weight, and remains transparent in out-of-sample testing while account-
+ing for transaction costs. Ablation studies show that governance regu-
+larization and concentration control are the primary stabilizing factors,
+whereas regime switching only marginally improves performance in the
+tested setting. We find no evidence of alpha generation or predictive
+outperformance. The contribution is therefore more limited and feasible:
+instability-aware supervision as a governance layer for robust portfolio
+control.
+Keywords: Portfolio optimization · Covariance instability · Supervisory
+governance · Regime adaptation · Robust diversification · Multi-agent
+system (MAS)-compatible architecture
+1
+Introduction
+Portfolio optimization concerns not only how to choose weights but also how
+much freedom the optimizer should have as the market environment changes. In
+
+--- PAGE BREAK ---
+2
+K. J. Subramanyam et al.
+tranquil markets, historical estimates of risk and dependence may be sufficiently
+stable for practical allocation. The same estimates can become fragile in stressed
+markets. Covariance matrices shift, volatility increases, diversification benefits
+decline, and portfolios that appeared diversified under normal conditions can
+become more concentrated in their effective risk exposure.
+The classic version of mean-variance optimization utilizes the framework de-
+veloped by Markowitz [22] and remains a key part of portfolio construction.
+The problem with the classic version, however, is well known, namely, that it is
+very sensitive to noisy input data. Therefore, robust estimation of the covariance
+matrix, shrinkage, and diversified portfolio allocations are all relevant consider-
+ations for real-world risk management [18, 23, 8]. Another important takeaway
+from studies into regime-sensitive asset allocation is that markets are dynamic
+and portfolio policies must adapt accordingly [3, 12, 30].
+But recently conducted researches in artificial intelligence in portfolio man-
+agement tend to focus either on return prediction, reinforcement learning, or
+black-box optimization. These research lines are important, but sometimes not
+easy to implement because of the need for interpretability, stability, and au-
+ditability. In this paper, we take another approach. We neither construct the
+alpha model nor build return predictors or autonomous trading agents. Instead,
+we ask another question: is it possible to build an interpretable supervisory mod-
+ule that will be able to change portfolio governance during market instability?
+This particular framework can be referred to as a governance-driven stabi-
+lization tool since it takes into account covariance shifts, rolling volatility, and
+correlation stress and converts them into an instability index. Based on the
+regime state, it adjusts concentration limits and regularization strength. The
+optimizer has more liberty during periods of stability, while instability requires
+the framework to become more conservative.
+The main contributions are:
+1. A regime-adaptive governance regularization mechanism that modifies con-
+centration limits and regularization strength, rather than replacing the un-
+derlying optimization model.
+2. An instability-aware supervisory signal that integrates covariance drift, rolling
+volatility, and correlation stress into a single interpretable governance trig-
+ger.
+3. An empirical evaluation with expanding normalization, out-of-sample test-
+ing, transaction costs, sensitivity analysis, ablation models, and concentra-
+tion diagnostics with a robustness focus.
+The framework is intended to be modular, but the implementation is central-
+ized. Its monitoring, governance adaptation, optimization, and audit components
+can be naturally mapped to a Multi-Agent supervisory architecture in the gen-
+eral sense of role-based system decomposition and coordinated decision modules
+[32]. This is a claim of architectural compatibility, not a claim that the present
+study realizes distributed autonomous agents.
+
+--- PAGE BREAK ---
+Regime-Adaptive Supervisory Governance
+3
+2
+Related Work
+Mean-variance optimization [22] and equilibrium risk pricing [29] form the basis
+of modern portfolio theory. These frameworks provide insight into the relation-
+ship between risk and expected return, but their inputs are difficult to estimate
+accurately. Shrinkage covariance estimation addresses part of this issue by im-
+proving the conditioning of high-dimensional covariance matrices [18]. The prac-
+tical significance of estimation limitations and robustness is discussed in more
+detail in the context of risk allocation [23].
+Another central concern is the difficulty of persistently beating simple diver-
+sification. DeMiguel et al. [8] show that naive 1/N diversification is hard to beat
+out of sample. A diversification-oriented approach to portfolio construction also
+implies an emphasis on concentration and out-of-sample robustness [27]. Such
+results point to the need for a cautious attitude towards the assessment process:
+a governance mechanism is to be assessed based not on the direct increase in the
+portfolio performance, but on its ability to ensure diversification and to manage
+concentration and downside risk behavior.
+Regime-dependent portfolio management has a rich tradition. Financial con-
+nections are subject to changes through time [19]. Regime-switching models have
+been used for international allocation, dynamic correlations, and multivariate as-
+set allocation [3, 25, 12]. Hidden Markov and switching-control frameworks fur-
+ther demonstrate how systems can adapt under changing latent states [9, 24].
+Work on volatility regimes [13, 10] provides theoretical grounding for detect-
+ing market stress conditions, while adaptive responses to market classifications
+[15] emphasize changing allocation behavior. Furthermore, recent work combines
+regime switching with robust portfolio optimization, random matrix theory [17],
+GARCH dynamics, and asymmetric dependence [14, 26, 30]. The deterioration of
+diversification benefits under stress [20] motivates the correlation-stress channel
+in our instability index.
+Robust portfolio optimization also informs the proposed method. Robust
+covariance estimators and minimum-variance formulations address instability in
+estimated risk structure [33, 7]. Conditional value-at-risk provides a coherent
+way to examine downside loss behavior [28], while recent robust formulations
+incorporate covariance uncertainty, CVaR constraints, and active-management
+settings [34, 16].
+The present paper differs from return-predictive AI portfolio systems. Deep
+reinforcement learning studies provide useful context for adaptive portfolio re-
+search [11], but the proposed framework is intentionally more modest. It is an
+interpretable supervisory governance layer designed to stabilize allocation be-
+havior under covariance instability.
+
+--- PAGE BREAK ---
+4
+K. J. Subramanyam et al.
+3
+Methodology
+3.1
+Asset Universe and Returns
+In the empirical universe, there are 18 liquid U.S. stocks in technology, finance,
+healthcare, consumer goods, industrials, energy, internet, retail, semiconductors,
+and utility sectors. Daily adjusted close prices are recorded from 1 January 2005
+to 1 January 2025. The daily log returns are calculated as
+ri,t = log
+ Pi,t
+Pi,t−1
+
+,
+(1)
+where Pi,t is the adjusted price of asset i at time t. Equation (1) therefore defines
+the daily return input used throughout the monitoring and optimization stages.
+3.2
+Instability Monitoring
+The supervisory monitor is constructed from three instability channels. The
+first channel is covariance drift which captures changes in the rolling covariance
+matrix as follows:
+Dt = ∥Σt −Σt−1∥F ,
+(2)
+where ∥·∥F is the Frobenius norm and Σt is the rolling covariance matrix.
+Thus, Equation (2) measures the period-to-period change in estimated covari-
+ance structure. According to random matrix theory [21], covariance matrices
+contain some noise, which makes noise-aware covariance estimation important.
+The second channel is rolling volatility, which measures the volatility pressure on
+the cross-assets and idiosyncratic risk shifts [6]. The third channel is correlation
+stress, which is captured by the average pairwise correlation level. It shows the
+tendency of disappearing diversification effects under stress [20].
+The process of normalizing the signals involves the use of an expanding mean
+and standard deviation, but with a lag of one period to prevent any data leakage:
+Zk,t =
+Xk,t −µexp
+k,t−1
+σexp
+k,t−1
+,
+(3)
+where Xk,t is the raw value of channel k. Equation (3) gives each channel a
+comparable, lagged standardized scale. The composite instability index is then
+It = αZD,t + βZV,t + γZC,t,
+(4)
+with α = 0.4, β = 0.3, and γ = 0.3. Equation (4) aggregates the three monitored
+channels into the supervisory signal. A regime is classified as unstable when
+It > τ, with τ = 1.0 in the main experiment.
+
+--- PAGE BREAK ---
+Regime-Adaptive Supervisory Governance
+5
+3.3
+Governance-Adaptive Optimization
+The portfolio is optimized using a Ledoit-Wolf covariance estimate [18], informed
+by random matrix theory applications [5]. The framework solves for each rebal-
+ance date
+min
+w
+√
+w⊤Σw + λg
+N
+X
+i=1
+w2
+i ,
+(5)
+subject to
+N
+X
+i=1
+wi = 1,
+0 ≤wi ≤ug.
+(6)
+where w is the vector of portfolio weights, Σ is the estimated covariance matrix,
+λg is the strength of governance regularization, and ug is the maximum asset
+weight in regime g. Equation (5) trades portfolio risk against concentration, while
+Equation (6) imposes full investment, long-only weights, and the regime-specific
+concentration cap.
+The stable regime uses ug = 0.35 and λg = 1. The unstable regime uses
+ug = 0.20 and λg = 10. Regularization methods [31] and concentration limits
+[4] are well-established for stabilizing optimization under uncertainty. The de-
+sign therefore avoids sudden switching between unrelated models. It keeps the
+optimizer structurally consistent, but changes the concentration risk that the
+governance layer allows. This leads to a supervisory pipeline covering the mar-
+ket data, instability monitoring, governance adaptation, Ledoit-Wolf constrained
+optimization, and audit storage.
+3.4
+Backtesting Protocol
+The backtest uses a 252-day training window and rebalances every 21 days. The
+out-of-sample performance of portfolios is done from 1 January 2015 to 1 Jan-
+uary 2025. The transaction cost is computed based on proportional transaction
+costs at a level of 0.001. This reflects typical transaction cost considerations [2].
+The measures reported include annual returns, annual volatility, Sharpe ratio,
+maximum drawdown, conditional value at risk at 95%, Herfindahl Hirschman
+Index (HHI), turnover, threshold sensitivity, and ablation analysis.
+HHI is used for concentration analysis:
+HHIt =
+N
+X
+i=1
+w2
+i,t.
+(7)
+Lower HHI indicates broader diversification, and Equation (7) is used to calcu-
+late the concentration results reported below. The effective number of assets is
+1/HHI.
+
+--- PAGE BREAK ---
+6
+K. J. Subramanyam et al.
+Table 1: Continuous crisis-window instability test.
+Sample
+N Mean It It > τ
+Crisis windows
+131
+1.3521 38.2%
+Non-crisis periods 4585 -0.0200
+9.9%
+Welch test: t = 7.47, p = 1.01 × 10−11.
+Table 2: Out-of-sample performance, 2015–2025.
+Metric
+Governance Equal weight
+Annual return
+0.1665
+0.1709
+Volatility
+0.1815
+0.1842
+Sharpe ratio
+0.8071
+0.8190
+Maximum drawdown
+-0.3590
+-0.3601
+CVaR (95%)
+-0.0279
+-0.0283
+4
+Empirical Results
+4.1
+Instability and Regime Activation
+The instability index jumps sharply during a number of major stress periods,
+most notably around the Global Financial Crisis and the COVID-19 crash. In
+the full signal sample, 4213 observations are classified as stable and 503 as un-
+stable, corresponding to 89.3% stable and 10.7% unstable observations. A direct
+event check classifies 4 of 9 selected crisis dates as unstable. This binary count
+is useful but incomplete, because a one-day classification can miss stress that
+builds over a surrounding window. To test the signal more directly, the mean
+instability score is compared inside ±10 calendar-day windows around the se-
+lected crisis dates against all remaining observations. Overlapping observations
+across clustered event windows are de-duplicated before testing. Table 1 shows
+that crisis windows have substantially higher instability scores than non-crisis
+periods.
+4.2
+Governance Versus Equal Weight
+Table 2 compares the governance framework with the equal-weight benchmark
+during the out-of-sample period, and Figure 1 illustrates the corresponding
+regime-annotated equity curve. Equal weight delivers a slightly higher annual re-
+turn and Sharpe ratio. The governance framework delivers slightly lower volatil-
+ity, maximum drawdown, and CVaR. Thus, the result does not indicate return
+dominance. Instead, it indicates stabilization: the framework sustains broad par-
+ticipation and slightly improves some measures of downside risk.
+The contrast between stable and unstable regimes is economically meaning-
+ful and is supported by regime-level diagnostics. During turbulent periods, the
+
+--- PAGE BREAK ---
+Regime-Adaptive Supervisory Governance
+7
+Fig. 1: Regime-annotated equity curve during the evaluation period. Red regions
+indicate unstable-governance activation.
+average daily return declines to 0.000261 from 0.000551. Volatility increases from
+0.010 to 0.026, the Sharpe ratio turns negative (-0.094 versus +0.715), and CVaR
+deteriorates from -0.025 to -0.063.
+4.3
+Concentration and Turnover
+The governance framework remains highly diversified. Its mean HHI is 0.0557,
+close to the equal-weight HHI of 0.0556, indicating an effective number of approx-
+imately 18 assets. Table 3 illustrates the importance of this result. The effective
+number of assets for the minimum-variance baseline is only 5.6, indicating sub-
+stantially greater concentration, whereas both governance variants remain close
+to equal-weight diversification. This outcome is a direct consequence of the regu-
+larization term λg
+P
+i w2
+i , which penalizes concentration and promotes a broadly
+distributed weight profile while retaining a risk-aware covariance estimate. Thus,
+the framework combines a risk-aware covariance estimator with a diversified al-
+location profile. Average turnover per rebalance is 0.0045, and the estimated
+annual transaction-cost drag
+is about 0.0001. These findings are important because they show that the
+framework does not stabilize the portfolio by making aggressive allocation swings.
+It remains diversified and low-turnover.
+
+--- PAGE BREAK ---
+8
+K. J. Subramanyam et al.
+Table 3: Cross-strategy concentration comparison.
+Strategy
+Mean HHI Effective N
+Equal weight
+0.0556
+18.0
+Minimum variance (LW)
+0.1776
+5.6
+Governance, no regime
+0.0557
+18.0
+Governance framework
+0.0557
+18.0
+Table 4: Ablation results, out-of-sample period 2015–2025.
+Model
+Annual return Volatility Sharpe Max drawdown CVaR (95%)
+Equal weight
+0.1709
+0.1842 0.8190
+-0.3601
+-0.0283
+Minimum variance (LW)
+0.0981
+0.1463 0.5338
+-0.3407
+-0.0218
+Governance, no regime
+0.1664
+0.1812 0.8075
+-0.3594
+-0.0279
+Governance framework
+0.1665
+0.1815 0.8071
+-0.3590
+-0.0279
+4.4
+Sensitivity and Ablation
+Threshold sensitivity is limited across the tested values of τ: 0.5, 1.0, 1.5, and
+2.0. Sharpe ratios remain close to 0.807, while unstable activation falls from
+19.8% to 4.0%. This suggests that the regularized governance objective is the
+main stabilizing component, while the exact threshold has only modest impact
+within the tested range.
+The ablation study compares four models: equal weight, Ledoit-Wolf min-
+imum variance, governance without regime switching, and the full governance
+framework. Figure 2a presents the corresponding equity paths, Figure 2b presents
+the drawdown paths, and Figure 2 combines both panels. Table 4 summarises
+the ablation metrics. Minimum variance reduces volatility and CVaR, but results
+in substantially lower return and Sharpe. The full framework and the regime
+switching-free governance are almost indistinguishable. Thus, the evidence is
+more strongly in favor of governance regularization and concentration control
+than a large incremental benefit from regime switching.
+4.5
+Statistical Evidence
+Paired tests indicate that the governance and equal-weight daily return series
+differ, with a paired t-test p-value of 0.0168 and a Wilcoxon p-value of 0.0037.
+This result does not indicate superior performance because equal weight has a
+slightly higher Sharpe ratio and annual return. Instead, the statistical difference
+shows that the governance mechanism changes the return distribution rather
+than improving returns. A more appropriate interpretation is that the gover-
+nance layer affects allocation behavior and slightly improves some downside-risk
+measures.
+
+--- PAGE BREAK ---
+Regime-Adaptive Supervisory Governance
+9
+(a) Equity curves.
+(b) Drawdown comparison.
+Fig. 2: Ablation study: (a) equity curves and (b) drawdown comparison for the
+four models, evaluation period 2015–2025.
+5
+Discussion
+The most notable result is concentration stability: the portfolio remains close to
+equal-weight HHI while using a risk-aware covariance estimator and transaction-
+cost-aware rebalancing. The other significant finding is the mild downside sta-
+bility, which is consistent with modern methods of measuring and mitigating
+systemic risks [1]. The downside stability is shown in terms of volatility, maxi-
+mum drawdown, and CVaR. It should be noted that the research does not make
+any claims of alpha generation or return prediction.
+MAS-based interpretation of the problem should also be understood cor-
+rectly. Although it is centralized, the implementation has four natural compo-
+nents that correspond to supervisory modules–a monitor, a governance adapter,
+an optimizer, and an audit. Such modularity is useful for constructing multi-
+agent supervisory systems in the future [32]. However, the current study does
+not implement distributed autonomous agents, agent communication protocols,
+or multi-agent reinforcement learning.
+6
+Limitations
+The present study has several limitations. First, the empirical universe is limited
+to 18 U.S. equities. Testing a wider range of asset classes, geographies, and his-
+torical periods would provide further validation. Second, the regime threshold is
+simple and fixed, leaving scope for dynamic adjustment. Third, the crisis-event
+validation is illustrative and requires future formal benchmarking. Fourth, the
+full framework remains close to equal weight in some periods because the gover-
+nance objective strongly preserves diversification. Finally, a promising direction
+is to deploy the current research pipeline as a fully operational multi-agent sys-
+tem.
+
+--- PAGE BREAK ---
+10
+K. J. Subramanyam et al.
+7
+Conclusion
+This paper proposed a regime-adaptive supervisory governance framework for
+instability-aware portfolio stabilization. The framework combines covariance drift,
+rolling volatility, and correlation stress into an interpretable instability index,
+then adapts portfolio concentration limits and regularization strength under un-
+stable regimes. Empirical results from 2005 to 2025 show that the framework
+preserves broad diversification and modestly improves downside stability rela-
+tive to equal weight, while not improving return or Sharpe performance. The
+ablation study further shows that governance regularization and concentration
+control are the dominant stabilizing mechanisms; regime switching modulates
+this behavior but does not materially improve Sharpe performance in the tested
+setting.
+The contribution is therefore not alpha generation. It is a transparent gover-
+nance mechanism for stabilizing portfolio behavior under covariance instability.
+The above position is both practical and methodologically sound in that it pro-
+vides for adaptive supervisory stabilizing without making unproved claims of
+predictive intelligence or automated trading.
+Disclosure of Interests. The authors have no competing interests to declare that
+are relevant to the content of this article.
+References
+1. Acharya, V.V., Engle, R.F., Richardson, M.: Capital shortfall: A new approach
+to measuring systemic risk. American Economic Review 102(3), 59–64 (2012).
+https://doi.org/10.1257/aer.102.3.59
+2. Almgren, R., Chriss, N.: Optimal execution of portfolio transactions. Journal of
+Risk 3(2), 5–40 (2001)
+3. Ang, A., Bekaert, G.: International asset allocation with regime shifts. Review of
+Financial Studies 15(4), 1137–1187 (2002). https://doi.org/10.1093/rfs/15.4.1137
+4. Basak, S., Shapiro, A.: Value-at-risk-based risk management: Optimal poli-
+cies and asset prices. Review of Financial Studies 14(2), 371–405 (2001).
+https://doi.org/10.1093/rfs/14.2.371
+5. Bouchaud, J.P., Potters, M.: Financial applications of random matrix theory: A
+short review. arXiv preprint arXiv:0910.1205 (2009), https://arxiv.org/abs/0910.
+1205
+6. Campbell, J.Y., Lettau, M., Malkiel, B.G., Xu, Y.: Have individual stocks become
+more volatile? an empirical exploration of idiosyncratic risk. Journal of Finance
+56(1), 1–43 (2001). https://doi.org/10.1111/0022-1082.00318
+7. Couillet, R., McKay, M.: Large dimensional analysis and optimization of robust
+shrinkage covariance matrix estimators. Journal of Multivariate Analysis 131, 99–
+120 (2014). https://doi.org/10.1016/j.jmva.2014.06.018
+8. DeMiguel, V., Garlappi, L., Uppal, R.: Optimal versus naive diversification: How
+inefficient is the 1/n portfolio strategy? Review of Financial Studies 22(5), 1915–
+1953 (2009). https://doi.org/10.1093/rfs/hhm075
+9. Elliott, R.J., Aggoun, L., Moore, J.B.: Hidden Markov Models: Estimation and
+Control. Springer, New York (2010). https://doi.org/10.1007/978-1-4419-1547-8
+
+--- PAGE BREAK ---
+Regime-Adaptive Supervisory Governance
+11
+10. Engle, R.F., Sheppard, K.: Theoretical and empirical properties of dynamic con-
+ditional correlation multivariate GARCH. Tech. Rep. 8554, National Bureau of
+Economic Research (2001). https://doi.org/10.3386/w8554
+11. Espiga-Fernandez,
+F.:
+A
+systematic
+approach
+to
+portfolio
+optimiza-
+tion
+using
+deep
+reinforcement
+learning.
+Algorithms
+17(12),
+570
+(2024).
+https://doi.org/10.3390/a17120570
+12. Guidolin, M., Timmermann, A.: Asset allocation under multivariate regime switch-
+ing. Journal of Economic Dynamics and Control 31(11), 3503–3544 (2007).
+https://doi.org/10.1016/j.jedc.2006.12.004
+13. Hamilton, J.D., Susmel, R.: Autoregressive conditional heteroskedasticity and
+changes in regime. Journal of Econometric Reviews 13(3), 307–333 (1994).
+https://doi.org/10.1080/07474939408800308
+14. Iqbal, J.: Application of Regime Switching and Random Matrix Theory in Portfolio
+Optimization. Ph.D. thesis, University of Essex (2018), https://repository.essex.ac.
+uk/22633/
+15. Kirby, C., Ostdiek, B.: It’s all in the name: A large sample approach to affective
+classification of stock market epithets. Journal of Finance 67(4), 1427–1465 (2012).
+https://doi.org/10.1111/j.1540-6261.2012.01753.x
+16. Kovalenko, I.: Active portfolio management using robust optimization. Annals of
+Operations Research (2025). https://doi.org/10.1007/s10479-025-06757-8
+17. Laloux, L., Cizeau, P., Bouchaud, J.P., Potters, M.: Noise dressing of financial
+correlation matrices. Physical Review Letters 83(7), 1467–1470 (1999)
+18. Ledoit, O., Wolf, M.: A well-conditioned estimator for large-dimensional co-
+variance matrices. Journal of Multivariate Analysis 88(2), 365–411 (2004).
+https://doi.org/10.1016/S0047-259X(03)00096-4
+19. Lo, A.W.: The adaptive markets hypothesis. Journal of Portfolio Management
+30(5), 15–29 (2004). https://doi.org/10.3905/jpm.2004.442611
+20. Longin, F., Solnik, B.: Extreme correlation of international equity markets. Journal
+of Finance 56(2), 649–676 (2001). https://doi.org/10.1111/0022-1082.00340
+21. Marčenko, V.A., Pastur, L.A.: Distribution of eigenvalues for some sets of random
+matrices. Mathematics of the USSR-Sbornik 1(4), 457–483 (1967)
+22. Markowitz, H.: Portfolio selection. Journal of Finance 7(1), 77–91 (1952).
+https://doi.org/10.2307/2977928
+23. Meucci, A.: Risk and Asset Allocation. Springer, Berlin, Heidelberg (2005).
+https://doi.org/10.1007/3-540-27904-3
+24. Narendra, K.S., Balakrishnan, J.: Improving transient response of adaptive control
+systems using multiple models and switching. IEEE Transactions on Automatic
+Control 39(9), 1861–1866 (1994). https://doi.org/10.1109/9.317110
+25. Pelletier, D.: Regime switching for dynamic correlations. Journal of Econometrics
+131(1-2), 445–473 (2006). https://doi.org/10.1016/j.jeconom.2005.01.013
+26. Peng, C., Kim, Y.S., Mittnik, S.: Portfolio optimization on multivariate regime
+switching GARCH models. arXiv preprint arXiv:2009.11367 (2020), https://arxiv.
+org/abs/2009.11367
+27. López
+de
+Prado,
+M.:
+Building
+diversified
+portfolios
+that
+outperform
+out
+of
+sample.
+Journal
+of
+Portfolio
+Management
+42(4),
+59–69
+(2016).
+https://doi.org/10.3905/jpm.2016.42.4.059
+28. Rockafellar,
+R.T.,
+Uryasev,
+S.:
+Conditional
+value-at-risk
+for
+general
+loss
+distributions.
+Journal
+of
+Banking
+&
+Finance
+26(7),
+1443–1471
+(2002).
+https://doi.org/10.1016/S0378-4266(02)00271-6
+
+--- PAGE BREAK ---
+12
+K. J. Subramanyam et al.
+29. Sharpe,
+W.F.:
+Capital
+asset
+prices:
+A
+theory
+of
+market
+equilibrium
+under
+conditions
+of
+risk.
+Journal
+of
+Finance
+19(3),
+425–442
+(1964).
+https://doi.org/10.2307/2977928
+30. Su, X.: Robust portfolio selection with regime switching and asymmetric depen-
+dence in financial markets. Journal of Economic Behavior & Organization 188,
+153–171 (2021). https://doi.org/10.1016/j.jebo.2021.05.006
+31. Tibshirani, R.: Regression shrinkage and selection via the lasso. Journal of the
+Royal Statistical Society (Series B) 58(1), 267–288 (1996)
+32. Wooldridge, M.: An Introduction to MultiAgent Systems. John Wiley & Sons,
+Chichester, 2 edn. (2009)
+33. Yang, L., Couillet, R., McKay, M.: A robust statistics approach to minimum vari-
+ance portfolio optimization. IEEE Transactions on Signal Processing 63(24), 6684–
+6697 (2015). https://doi.org/10.1109/TSP.2015.2469648
+34. Zhou, Q.: Portfolio optimization with robust covariance and conditional value-at-
+risk constraints. arXiv preprint arXiv:2406.00610 (2024), https://arxiv.org/abs/
+2406.00610

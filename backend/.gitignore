@@ -1,0 +1,22 @@
+# Python virtual environment & cache
+venv/
+.venv/
+env/
+ENV/
+livekit/
+Include/
+Lib/
+Scripts/
+pyvenv.cfg
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Local secrets
+.env
+.env.local
+*.env
+.DS_Store
+Thumbs.db
