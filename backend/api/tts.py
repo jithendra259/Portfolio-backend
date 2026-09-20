@@ -31,7 +31,7 @@ from config import settings
 # ---------------------------------------------------------------------------
 _GROQ_TTS_URL = "https://api.groq.com/openai/v1/audio/speech"
 _ORPHEUS_MODEL = "canopylabs/orpheus-v1-english"
-_ORPHEUS_VOICE = "troy"           # male voice (matches Groq's official Python example)
+_ORPHEUS_VOICES = ["troy", "austin", "daniel", "diana", "hannah", "autumn"]  # male-first priority, full voice roster as fallback
 _MAX_CHARS = 190               # Stay safely below Groq's 200-char limit
 _SAMPLE_RATE = 24_000          # Orpheus outputs 24 kHz wav
 _NUM_CHANNELS = 1
@@ -120,27 +120,36 @@ class _OrpheusChunkedStream(ChunkedStream):
                 if not chunk_text:
                     continue
 
-                 resp = await client.post(
-                    _GROQ_TTS_URL,
-                    headers={
-                        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": _ORPHEUS_MODEL,
-                        "voice": _ORPHEUS_VOICE,
-                        "input": chunk_text,
-                        "response_format": "wav",
-                    },
-                )
-                if resp.status_code >= 400:
-                    err_body = resp.text[:500]
-                    print(f"--> [TTS Groq Error] {resp.status_code} for voice='{_ORPHEUS_VOICE}', input_len={len(chunk_text)}: {err_body}")
-                resp.raise_for_status()
+                audio_pushed = False
+                for voice in _ORPHEUS_VOICES:
+                    resp = await client.post(
+                        _GROQ_TTS_URL,
+                        headers={
+                            "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": _ORPHEUS_MODEL,
+                            "voice": voice,
+                            "input": chunk_text,
+                            "response_format": "wav",
+                        },
+                    )
+                    if resp.status_code >= 400:
+                        err_body = resp.text[:300]
+                        print(f"--> [TTS Groq Fallback] voice='{voice}' failed ({resp.status_code}): {err_body}")
+                        continue
 
-                # Strip the 44-byte WAV header and push raw PCM bytes
-                raw_pcm = resp.content[_WAV_HEADER_BYTES:]
-                output_emitter.push(raw_pcm)
+                    raw_pcm = resp.content[_WAV_HEADER_BYTES:]
+                    output_emitter.push(raw_pcm)
+                    audio_pushed = True
+                    break
+
+                if not audio_pushed:
+                    raise RuntimeError(
+                        f"All Orpheus voices failed for chunk (input_len={len(chunk_text)}). "
+                        f"Triggering FallbackAdapter to switch to next TTS provider."
+                    )
 
         output_emitter.flush()
 
