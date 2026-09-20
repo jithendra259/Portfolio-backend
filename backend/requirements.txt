@@ -2,6 +2,7 @@ livekit>=1.1.18
 livekit-agents[cartesia,deepgram,google]>=1.8.2
 livekit-plugins-openai>=1.8.2
 livekit-plugins-elevenlabs>=0.8.2
+supabase>=2.0.0
 langgraph>=1.0.0
 langchain-core>=1.0.0
 python-dotenv>=1.0.0
