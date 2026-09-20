@@ -62,8 +62,10 @@ class PortfolioBaseAgent(Agent):
             self.userdata.pending_handoff = None
 
             # Reset chat context: only carry what is needed for this specific handoff task
-            self.chat_ctx.items.clear()
-            self.chat_ctx.add_message(
+            # Use copy() + update_chat_ctx() because LiveKit chat_ctx is read-only during on_enter
+            new_ctx = self.chat_ctx.copy()
+            new_ctx.items.clear()
+            new_ctx.add_message(
                 role="system",
                 content=(
                     f"[Task Directive: You are the {self.agent_name.capitalize()} Specialist. "
@@ -74,10 +76,11 @@ class PortfolioBaseAgent(Agent):
             )
 
             if handoff.last_user_query:
-                self.chat_ctx.add_message(
+                new_ctx.add_message(
                     role="user",
                     content=handoff.last_user_query,
                 )
+            self.update_chat_ctx(new_ctx)
         else:
             # Minimal continuity fallback: carry at most the last 2 items
             prev_agent = self.userdata.prev_agent
@@ -88,9 +91,11 @@ class PortfolioBaseAgent(Agent):
                         exclude_config_update=True,
                         exclude_instructions=True,
                     ).truncate(max_items=2)
+                    new_ctx = self.chat_ctx.copy()
                     for item in copied_ctx.items:
-                        if item not in self.chat_ctx.items:
-                            self.chat_ctx.items.append(item)
+                        if item not in new_ctx.items:
+                            new_ctx.items.append(item)
+                    self.update_chat_ctx(new_ctx)
                 except Exception as err:
                     print(f"--> [Context Preservation Warning] {err}")
 
