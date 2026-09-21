@@ -16,9 +16,13 @@ jobs:
     steps:
       - name: Ping Render service
         run: |
+          # The secret RENDER_HEALTH_URL should contain the full health‑check URL, e.g.
+          # https://my-service.onrender.com/health
+          # GitHub masks secret values in logs, so you will see "***" instead of the URL.
           STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 "${{ secrets.RENDER_HEALTH_URL }}" || echo "000")
           echo "Health check responded with HTTP $STATUS"
-          if [ "$STATUS" != "000" ] && [ "$STATUS" -lt 500 ]; then
+          # Consider any 2xx or 3xx response as a successful ping.
+          if [[ "$STATUS" =~ ^[23][0-9]{2}$ ]]; then
             echo "Service is awake or waking up."
             exit 0
           else
