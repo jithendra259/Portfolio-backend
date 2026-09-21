@@ -3,6 +3,7 @@ LiveKit Agent Server and RTC Session Lifecycle Orchestrator.
 Manages room connections, voice pipeline startup, greeting utterance, and clean session shutdown.
 """
 
+import json
 import uuid
 from aiohttp import web
 
