@@ -145,6 +145,15 @@ class _OrpheusChunkedStream(ChunkedStream):
                         print(f"--> [TTS Groq Fallback] voice='{voice}' failed ({resp.status_code}): {err_body}")
                         continue
 
+                    content_type = resp.headers.get("content-type", "")
+                    if "audio/wav" not in content_type:
+                        print(f"--> [TTS Groq] Unexpected content-type '{content_type}' for voice='{voice}', trying next voice.")
+                        continue
+
+                    if not resp.content.startswith(b"RIFF"):
+                        print(f"--> [TTS Groq] Response does not start with RIFF header for voice='{voice}', skipping.")
+                        continue
+
                     raw_pcm = resp.content[_WAV_HEADER_BYTES:]
                     output_emitter.push(raw_pcm)
                     audio_pushed = True
