@@ -3,16 +3,45 @@ LiveKit Agent Server and RTC Session Lifecycle Orchestrator.
 Manages room connections, voice pipeline startup, greeting utterance, and clean session shutdown.
 """
 
-import asyncio
-import json
+import uuid
+from aiohttp import web
 
 from livekit import agents
 from livekit.agents import AgentServer, room_io
+from livekit.agents.worker import http_server as _http_server_module
 
 from agent import create_multi_agent_system, log_session_start
 from config import settings
 from voice import create_voice_session, prewarm_voice_pipeline
-from .health_server import start_health_server
+
+# ── Custom HTTP routes for health checks and multi-user room creation ──
+
+async def _health_handler(request: web.Request) -> web.Response:
+    """Simple health check endpoint."""
+    return web.json_response({"status": "ok", "service": "portfolio-backend"})
+
+async def _create_room_handler(request: web.Request) -> web.Response:
+    """Generate a unique room UUID for multi-user session isolation."""
+    room_id = str(uuid.uuid4())
+    return web.json_response({"room": room_id})
+
+# ── Monkey-patch HttpServer to inject our custom routes ────────────────────
+# The AgentServer creates its HttpServer inside run(). By patching HttpServer.__init__
+# before AgentServer.run() is called, our routes get registered on the internal
+# aiohttp app before the HTTP server starts (on the exposed port 10000).
+
+_original_http_server_init = _http_server_module.HttpServer.__init__
+
+def _patched_http_server_init(self, *args, **kwargs):
+    _original_http_server_init(self, *args, **kwargs)
+    # The HttpServer creates its internal aiohttp Application as self.app
+    if hasattr(self, 'app') and hasattr(self.app, 'router'):
+        self.app.router.add_get("/health", _health_handler)
+        self.app.router.add_post("/create_room", _create_room_handler)
+        print("--> [Server] Injected /health and /create_room routes into AgentServer HTTP interface.")
+
+# Apply the monkey-patch before AgentServer is instantiated
+_http_server_module.HttpServer.__init__ = _patched_http_server_init
 
 # Configure AgentServer with thread executor, generous init timeout, and prewarm routine
 server = AgentServer(
@@ -27,11 +56,8 @@ server = AgentServer(
     setup_fnc=prewarm_voice_pipeline,
 )
 
-# Start the lightweight aiohttp health server in the background.
-# It runs on the same process but on a separate port (default 8001).
-# This does not interfere with the LiveKit AgentServer.
-asyncio.create_task(start_health_server(host="0.0.0.0", port=8001))
-
+# No separate aiohttp health server needed — routes are injected into AgentServer's HTTP interface
+# which runs on the exposed Render port (10000).
 
 
 @server.rtc_session(agent_name="my-agent")
