@@ -1,8 +1,8 @@
-    """
-    Voice Session Factory for LiveKit Voice Agent.
-    Uses Groq Whisper for STT, Groq Orpheus TTS (primary) with ElevenLabs fallback,
-    and Groq LLM with Google Gemini 2.5 Flash as LLM fallback.
-    """
+"""
+Voice Session Factory for LiveKit Voice Agent.
+Uses Groq Whisper for STT, Groq Orpheus TTS (primary) with ElevenLabs fallback,
+and Groq LLM with Google Gemini 2.5 Flash as LLM fallback.
+"""
 
 from livekit import agents
 from livekit.agents import (
