@@ -136,7 +136,12 @@ class _OrpheusChunkedStream(ChunkedStream):
                         },
                     )
                     if resp.status_code >= 400:
-                        err_body = resp.text[:300]
+                        err_body = resp.text[:200]
+                        # Model-level errors (terms, auth, quota) are shared across all voices
+                        if "model_terms_required" in err_body or "requires terms acceptance" in err_body:
+                            print(f"--> [TTS Groq] Model requires terms acceptance. Accept at https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english — skipping voice cycle, switching to ElevenLabs.")
+                            break
+                        # Invalid voice or input error — try next voice
                         print(f"--> [TTS Groq Fallback] voice='{voice}' failed ({resp.status_code}): {err_body}")
                         continue
 

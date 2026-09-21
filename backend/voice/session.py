@@ -1,8 +1,8 @@
-"""
-Voice Session Factory for LiveKit Voice Agent.
-Uses Groq Whisper for STT, Groq Orpheus TTS (primary) with ElevenLabs fallback,
-and Groq LLM with Google Gemini as LLM fallback.
-"""
+    """
+    Voice Session Factory for LiveKit Voice Agent.
+    Uses Groq Whisper for STT, Groq Orpheus TTS (primary) with ElevenLabs fallback,
+    and Groq LLM with Google Gemini 2.5 Flash as LLM fallback.
+    """
 
 from livekit import agents
 from livekit.agents import (
@@ -27,8 +27,7 @@ def create_voice_session(ctx: agents.JobContext | None = None) -> AgentSession:
           → AssemblyAI Universal Streaming (automatic fallback adapter on 429/connection error)
           → Deepgram Nova-2 (secondary fallback)
 
-    TTS:  Cartesia Sonic-3 (primary, sub-100ms synthesis, phonetic replacements)
-          → ElevenLabs Multilingual v2 (automatic fallback adapter)
+    TTS:  Groq Orpheus (primary, sub-90ms synthesis) → ElevenLabs Multilingual v2 (automatic fallback adapter)
 
     LLM:  Groq LPU (primary) → Google Gemini 2.5 Flash (agent-side FallbackAdapter)
 
