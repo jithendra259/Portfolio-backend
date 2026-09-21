@@ -1,8 +1,13 @@
 name: keep-render-awake
 
+# Fires every 5 minutes to keep Render free-tier web service awake.
+# Render sleeps after 15 min of inactivity; 5-min pings provide a 10-min buffer.
+# NOTE: GitHub Actions may delay scheduled runs by up to ~10 min,
+# so also set up https://cron-job.org for guaranteed timing.
+
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"  # every 5 min — stays well within Render free-tier's 15-min sleep threshold
   workflow_dispatch:
 
 jobs:
