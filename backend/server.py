@@ -12,6 +12,7 @@ from livekit.agents import AgentServer, room_io
 from agent import create_multi_agent_system, log_session_start
 from config import settings
 from voice import create_voice_session, prewarm_voice_pipeline
+from .health_server import start_health_server
 
 # Configure AgentServer with thread executor, generous init timeout, and prewarm routine
 server = AgentServer(
@@ -25,6 +26,11 @@ server = AgentServer(
     shutdown_process_timeout=30.0,
     setup_fnc=prewarm_voice_pipeline,
 )
+
+# Start the lightweight aiohttp health server in the background.
+# It runs on the same process but on a separate port (default 8001).
+# This does not interfere with the LiveKit AgentServer.
+asyncio.create_task(start_health_server(host="0.0.0.0", port=8001))
 
 
 

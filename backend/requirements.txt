@@ -9,3 +9,4 @@ python-dotenv>=1.0.0
 scikit-learn>=1.4.0
 numpy>=1.26.0
 pymupdf>=1.24.0
+aiohttp>=3.10.0
