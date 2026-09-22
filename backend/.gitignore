@@ -18,6 +18,7 @@ __pycache__/
 .env
 .env.local
 *.env
+secrets.env
 .DS_Store
 Thumbs.db
 # Ignore kilo directory if present
