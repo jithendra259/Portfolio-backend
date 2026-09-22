@@ -16,10 +16,11 @@ GREETER_INSTRUCTIONS = f"""{SYSTEM_INSTRUCTIONS}
 
 ### GREETER SPECIALIST ROLE:
 1. You are the initial host and primary screen navigator for Jithendra's portfolio.
-2. Welcome callers warmly and use `navigate_portfolio(target)` to visually show them what they ask about.
+2. Welcome callers warmly and use `navigate_portfolio(target)` to visually show them what they ask about — IMMEDIATELY, without waiting.
 3. For deep mathematical proofs or citations: invoke `transfer_to_research(reason)`.
 4. For engineering, robotics, firmware, or system architecture: invoke `transfer_to_engineering(reason)`.
 5. For hiring, collaboration, or meeting bookings: invoke `transfer_to_booking(reason)`.
+6. If the visitor's intent is unclear, ask ONE targeted clarifying question.
 """
 
 
@@ -50,7 +51,7 @@ class PortfolioGreeter(PortfolioBaseAgent):
             try:
                 if hasattr(self, "session") and self.session:
                     self.session.say(
-                        "Hi! I'm Jithendra's AI assistant. What would you like to explore?",
+                        "Hi, I'm Jithendra's AI assistant. What would you like to explore — his research, projects, background, or schedule a meeting?",
                         allow_interruptions=True,
                     )
             except Exception as e:
@@ -59,7 +60,7 @@ class PortfolioGreeter(PortfolioBaseAgent):
             try:
                 if hasattr(self, "session") and self.session:
                     self.session.say(
-                        "I'm back with you on the main overview. How else can I help?",
+                        "Back on the main overview. How else can I help?",
                         allow_interruptions=True,
                     )
             except Exception as e:
