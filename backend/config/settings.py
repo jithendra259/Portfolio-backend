@@ -29,7 +29,7 @@ class Settings:
     # Direct provider audio credentials. These bypass LiveKit Inference quotas.
     DEEPGRAM_API_KEY: str = os.getenv("DEEPGRAM_API_KEY", "").strip("\"' \t\r\n")
     CARTESIA_API_KEY: str = os.getenv("CARTESIA_API_KEY", "").strip("\"' \t\r\n")
-    ELEVENLABS_API_KEY: str = os.getenv("ELEVENLABS_API_KEY", "").strip("\"' \t\r\n")
+    ELEVEN_API_KEY: str = os.getenv("ELEVEN_API_KEY", "").strip("\"' \t\r\n")
 
     # Speech-To-Text / Text-To-Speech
     STT_MODEL: str = "whisper-large-v3"

@@ -13,7 +13,7 @@ from livekit.agents import AgentServer, room_io
 from livekit.agents.worker import http_server as _http_server_module
 
 from agent import create_multi_agent_system, log_session_start
-from api import close_http_client
+from api import build_llm_pipeline
 from config import settings
 from voice import create_voice_session, prewarm_voice_pipeline
 
@@ -168,9 +168,8 @@ async def my_agent(ctx: agents.JobContext) -> None:
                 idle_disconnect_task.cancel()
             ctx.shutdown(reason="remote participant left")
 
-    # 6. Close shared HTTP client on shutdown
-    async def _close_http_client():
-        await close_http_client()
-        print("--> [Server] Closed shared HTTP client.")
+    # 6. Clean shutdown - no shared HTTP client to close
+    async def _cleanup():
+        print("--> [Server] Session cleanup complete.")
 
-    ctx.add_shutdown_callback(_close_http_client)
+    ctx.add_shutdown_callback(_cleanup)

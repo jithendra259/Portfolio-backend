@@ -5,7 +5,6 @@ STT:  Deepgram Flux (primary, built-in turn detection via STT)
       No local VAD — STT handles end-of-turn detection.
 
 TTS:  ElevenLabs Multilingual v2 (primary — reliable, no terms acceptance)
-      → Groq Orpheus (fallback, requires terms acceptance at console.groq.com)
 
 LLM:  Groq LPU (primary) → Google Gemini 2.5 Flash (agent-side FallbackAdapter)
 
@@ -20,12 +19,11 @@ from livekit import agents
 from livekit.agents import (
     AgentSession,
     TurnHandlingOptions,
-    tts,
     text_transforms,
 )
 from livekit.plugins import deepgram, elevenlabs
 
-from api import build_llm_pipeline, GroqOrpheusTTS
+from api import build_llm_pipeline
 from config import settings
 from prompts import PRONUNCIATION_REPLACEMENTS
 
@@ -39,7 +37,6 @@ def create_voice_session(ctx: agents.JobContext | None = None) -> AgentSession:
           vad=None — no local VAD inference, zero CPU cost for VAD
 
     TTS:  ElevenLabs Multilingual v2 (primary)
-          → Groq Orpheus (fallback, requires terms acceptance)
 
     LLM:  Groq LPU (primary) → Google Gemini 2.5 Flash (fallback)
 
@@ -56,19 +53,14 @@ def create_voice_session(ctx: agents.JobContext | None = None) -> AgentSession:
         api_key=settings.DEEPGRAM_API_KEY,
     )
 
-    # ── TTS Pipeline with Fallback ─────────────────────────────────────────────
-    # ElevenLabs first (reliable, no terms acceptance needed)
-    tts_providers = [
-        elevenlabs.TTS(
-            model=settings.TTS_MODEL,
-            voice_id=settings.TTS_VOICE_ID,
-            api_key=settings.ELEVENLABS_API_KEY,
-        )
-    ]
-    # Groq Orpheus as fallback (requires terms acceptance at console.groq.com)
-    tts_providers.append(GroqOrpheusTTS())
-
-    tts_pipeline = tts.FallbackAdapter(tts_providers, max_retry_per_tts=1)
+    # ── TTS: ElevenLabs (primary only — Groq Orpheus fallback removed) ─────────
+    # LiveKit's ElevenLabs plugin expects ELEVEN_API_KEY env var.
+    # model="eleven_multilingual_v2" for quality, "eleven_turbo_v2_5" for lower latency.
+    tts_pipeline = elevenlabs.TTS(
+        model=settings.TTS_MODEL,
+        voice_id=settings.TTS_VOICE_ID,
+        api_key=settings.ELEVEN_API_KEY,
+    )
 
 
     return AgentSession(
