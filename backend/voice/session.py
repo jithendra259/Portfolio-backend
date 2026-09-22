@@ -1,7 +1,19 @@
 """
 Voice Session Factory for LiveKit Voice Agent.
-Uses Groq Whisper for STT, Groq Orpheus TTS (primary) with ElevenLabs fallback,
-and Groq LLM with Google Gemini 2.5 Flash as LLM fallback.
+
+STT:  Groq Whisper Large V3 (primary, OpenAI-compatible API)
+      → Deepgram Nova-3 (fallback, requires DEEPGRAM_API_KEY)
+      → AssemblyAI (fallback, requires ASSEMBLYAI_API_KEY)
+
+TTS:  ElevenLabs Multilingual v2 (primary — reliable, no terms acceptance)
+      → Groq Orpheus (fallback, requires terms acceptance at console.groq.com)
+
+LLM:  Groq LPU (primary) → Google Gemini 2.5 Flash (agent-side FallbackAdapter)
+
+Turn: LiveKit Cloud TurnDetector v1 (0% local CPU on Render)
+      Adaptive interruption — filters backchannels ("uh-huh", "ok", "right")
+      backchannel_boundary=(1.0, 2.0) — extra 2s end-window for Deepgram transcript latency
+      Preemptive LLM generation (no preemptive TTS — saves Render CPU)
 """
 
 from livekit import agents
@@ -9,10 +21,11 @@ from livekit.agents import (
     AgentSession,
     TurnHandlingOptions,
     inference,
+    stt,
     text_transforms,
     tts,
 )
-from livekit.plugins import openai, elevenlabs
+from livekit.plugins import deepgram, elevenlabs, openai, assemblyai
 
 from api import build_llm_pipeline, GroqOrpheusTTS
 from config import settings
@@ -23,11 +36,12 @@ def create_voice_session(ctx: agents.JobContext | None = None) -> AgentSession:
     """
     Constructs an ultra-low latency, fault-tolerant voice pipeline:
 
-    STT:  Deepgram Nova-3 (primary)
-          → AssemblyAI Universal Streaming (automatic fallback adapter on 429/connection error)
-          → Deepgram Nova-2 (secondary fallback)
+    STT:  Groq Whisper Large V3 (primary, via OpenAI-compatible API)
+          → Deepgram Nova-3 (fallback, if DEEPGRAM_API_KEY configured)
+          → AssemblyAI (secondary fallback, if ASSEMBLYAI_API_KEY configured)
 
-    TTS:  Groq Orpheus (primary, sub-90ms synthesis) → ElevenLabs Multilingual v2 (automatic fallback adapter)
+    TTS:  ElevenLabs Multilingual v2 (primary — reliable, no terms acceptance)
+          → Groq Orpheus (fallback, requires terms acceptance at console.groq.com)
 
     LLM:  Groq LPU (primary) → Google Gemini 2.5 Flash (agent-side FallbackAdapter)
 
@@ -36,30 +50,45 @@ def create_voice_session(ctx: agents.JobContext | None = None) -> AgentSession:
           backchannel_boundary=(1.0, 2.0) — extra 2s end-window for Deepgram transcript latency
           Preemptive LLM generation (no preemptive TTS — saves Render CPU)
     """
-    # We use Groq's high-rate-limit Whisper endpoint for Speech-to-Text
-    stt_pipeline = openai.STT(
-        model=settings.STT_MODEL,
-        language=settings.STT_LANGUAGE,
-        base_url=settings.GROQ_BASE_URL,
-        api_key=settings.GROQ_API_KEY,
-    )
+    # ── STT Pipeline with Fallback ─────────────────────────────────────────────
+    stt_providers = [
+        openai.STT(
+            model=settings.STT_MODEL,
+            language=settings.STT_LANGUAGE,
+            base_url=settings.GROQ_BASE_URL,
+            api_key=settings.GROQ_API_KEY,
+        )
+    ]
 
-    if not settings.ELEVENLABS_API_KEY:
-        raise RuntimeError("ELEVENLABS_API_KEY must be configured as TTS fallback.")
+    if settings.DEEPGRAM_API_KEY and settings.DEEPGRAM_API_KEY != "your-deepgram-key":
+        stt_providers.append(
+            deepgram.STT(
+                model="nova-3",
+                language=settings.STT_LANGUAGE,
+                api_key=settings.DEEPGRAM_API_KEY,
+            )
+        )
 
-    # Primary TTS: Groq Orpheus — ultra-fast, realistic voice (auto-chunked to ≤190 chars)
-    # Fallback TTS: ElevenLabs — kicks in automatically if Orpheus returns an error
-    tts_pipeline = tts.FallbackAdapter(
-        [
-            GroqOrpheusTTS(),
-            elevenlabs.TTS(
-                model=settings.TTS_MODEL,
-                voice_id=settings.TTS_VOICE_ID,
-                api_key=settings.ELEVENLABS_API_KEY,
-            ),
-        ],
-        max_retry_per_tts=1,
-    )
+    if settings.ASSEMBLYAI_API_KEY and settings.ASSEMBLYAI_API_KEY != "your-assemblyai-key":
+        stt_providers.append(
+            assemblyai.STT(api_key=settings.ASSEMBLYAI_API_KEY)
+        )
+
+    stt_pipeline = stt.FallbackAdapter(stt_providers) if len(stt_providers) > 1 else stt_providers[0]
+
+    # ── TTS Pipeline with Fallback ─────────────────────────────────────────────
+    # ElevenLabs first (reliable, no terms acceptance needed)
+    tts_providers = [
+        elevenlabs.TTS(
+            model=settings.TTS_MODEL,
+            voice_id=settings.TTS_VOICE_ID,
+            api_key=settings.ELEVENLABS_API_KEY,
+        )
+    ]
+    # Groq Orpheus as fallback (requires terms acceptance at console.groq.com)
+    tts_providers.append(GroqOrpheusTTS())
+
+    tts_pipeline = tts.FallbackAdapter(tts_providers, max_retry_per_tts=1)
 
 
     return AgentSession(

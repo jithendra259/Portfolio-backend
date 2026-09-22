@@ -17,7 +17,7 @@ class Settings:
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "").strip("\"' \t\r\n")
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
-    GROQ_MAX_TOKENS: int = 60
+    GROQ_MAX_TOKENS: int = 800
     GROQ_TEMPERATURE: float = 0.2
 
     # Google Gemini fallback (direct Google API, not LiveKit Inference)
@@ -30,6 +30,7 @@ class Settings:
     DEEPGRAM_API_KEY: str = os.getenv("DEEPGRAM_API_KEY", "").strip("\"' \t\r\n")
     CARTESIA_API_KEY: str = os.getenv("CARTESIA_API_KEY", "").strip("\"' \t\r\n")
     ELEVENLABS_API_KEY: str = os.getenv("ELEVENLABS_API_KEY", "").strip("\"' \t\r\n")
+    ASSEMBLYAI_API_KEY: str = os.getenv("ASSEMBLYAI_API_KEY", "").strip("\"' \t\r\n")
 
     # Speech-To-Text / Text-To-Speech
     STT_MODEL: str = "whisper-large-v3"
