@@ -25,7 +25,7 @@ from livekit.agents import (
     text_transforms,
     tts,
 )
-from livekit.plugins import deepgram, elevenlabs, openai, assemblyai
+from livekit.plugins import deepgram, elevenlabs, openai
 
 from api import build_llm_pipeline, GroqOrpheusTTS
 from config import settings
@@ -36,9 +36,8 @@ def create_voice_session(ctx: agents.JobContext | None = None) -> AgentSession:
     """
     Constructs an ultra-low latency, fault-tolerant voice pipeline:
 
-    STT:  Groq Whisper Large V3 (primary, via OpenAI-compatible API)
-          → Deepgram Nova-3 (fallback, if DEEPGRAM_API_KEY configured)
-          → AssemblyAI (secondary fallback, if ASSEMBLYAI_API_KEY configured)
+    STT:  Groq Whisper Large V3 (primary, OpenAI-compatible API)
+          → Deepgram Nova-3 (fallback, requires DEEPGRAM_API_KEY)
 
     TTS:  ElevenLabs Multilingual v2 (primary — reliable, no terms acceptance)
           → Groq Orpheus (fallback, requires terms acceptance at console.groq.com)
@@ -67,11 +66,6 @@ def create_voice_session(ctx: agents.JobContext | None = None) -> AgentSession:
                 language=settings.STT_LANGUAGE,
                 api_key=settings.DEEPGRAM_API_KEY,
             )
-        )
-
-    if settings.ASSEMBLYAI_API_KEY and settings.ASSEMBLYAI_API_KEY != "your-assemblyai-key":
-        stt_providers.append(
-            assemblyai.STT(api_key=settings.ASSEMBLYAI_API_KEY)
         )
 
     stt_pipeline = stt.FallbackAdapter(stt_providers) if len(stt_providers) > 1 else stt_providers[0]

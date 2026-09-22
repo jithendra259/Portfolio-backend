@@ -30,7 +30,6 @@ class Settings:
     DEEPGRAM_API_KEY: str = os.getenv("DEEPGRAM_API_KEY", "").strip("\"' \t\r\n")
     CARTESIA_API_KEY: str = os.getenv("CARTESIA_API_KEY", "").strip("\"' \t\r\n")
     ELEVENLABS_API_KEY: str = os.getenv("ELEVENLABS_API_KEY", "").strip("\"' \t\r\n")
-    ASSEMBLYAI_API_KEY: str = os.getenv("ASSEMBLYAI_API_KEY", "").strip("\"' \t\r\n")
 
     # Speech-To-Text / Text-To-Speech
     STT_MODEL: str = "whisper-large-v3"
