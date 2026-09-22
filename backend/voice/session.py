@@ -50,9 +50,9 @@ def create_voice_session(ctx: agents.JobContext | None = None) -> AgentSession:
     # ── STT: Deepgram Flux with STT-based turn detection ───────────────────────
     # Flux has built-in end-of-turn detection; no local VAD needed.
     # This eliminates the CPU starvation that Silero VAD caused on Render 0.1 vCPU.
+    # Note: STTv2 doesn't accept 'language' param; model="flux-general-en" selects English.
     stt_pipeline = deepgram.STTv2(
         model="flux-general-en",
-        language=settings.STT_LANGUAGE,
         api_key=settings.DEEPGRAM_API_KEY,
     )
 
