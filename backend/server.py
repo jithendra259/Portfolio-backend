@@ -3,6 +3,7 @@ LiveKit Agent Server and RTC Session Lifecycle Orchestrator.
 Manages room connections, voice pipeline startup, greeting utterance, and clean session shutdown.
 """
 
+import asyncio
 import json
 import uuid
 from aiohttp import web
@@ -12,6 +13,7 @@ from livekit.agents import AgentServer, room_io
 from livekit.agents.worker import http_server as _http_server_module
 
 from agent import create_multi_agent_system, log_session_start
+from api import close_http_client
 from config import settings
 from voice import create_voice_session, prewarm_voice_pipeline
 
@@ -37,9 +39,10 @@ def _patched_http_server_init(self, *args, **kwargs):
     _original_http_server_init(self, *args, **kwargs)
     # The HttpServer creates its internal aiohttp Application as self.app
     if hasattr(self, 'app') and hasattr(self.app, 'router'):
+        self.app.router.add_get("/", _health_handler)
         self.app.router.add_get("/health", _health_handler)
         self.app.router.add_post("/create_room", _create_room_handler)
-        print("--> [Server] Injected /health and /create_room routes into AgentServer HTTP interface.")
+        print("--> [Server] Injected /, /health and /create_room routes into AgentServer HTTP interface.")
 
 # Apply the monkey-patch before AgentServer is instantiated
 _http_server_module.HttpServer.__init__ = _patched_http_server_init
@@ -164,3 +167,10 @@ async def my_agent(ctx: agents.JobContext) -> None:
             if idle_disconnect_task and not idle_disconnect_task.done():
                 idle_disconnect_task.cancel()
             ctx.shutdown(reason="remote participant left")
+
+    # 6. Close shared HTTP client on shutdown
+    async def _close_http_client():
+        await close_http_client()
+        print("--> [Server] Closed shared HTTP client.")
+
+    ctx.add_shutdown_callback(_close_http_client)

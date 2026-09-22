@@ -7,7 +7,7 @@ services:
     dockerContext: .
     autoDeploy: true
     plan: free
-    healthCheckPath: /
+    healthCheckPath: /health
     envVars:
       - key: LIVEKIT_URL
         sync: false

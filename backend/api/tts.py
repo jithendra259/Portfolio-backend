@@ -4,15 +4,17 @@ Groq Orpheus TTS wrapper for LiveKit Agents (livekit-agents >= 1.8).
 Groq's Orpheus model is limited to 200 characters per request.
 This wrapper splits long text into sentence-boundary chunks, synthesises each
 chunk via the OpenAI-compatible /audio/speech endpoint, and pushes the raw
-WAV bytes into the AudioEmitter — making it transparent to the rest of the
+PCM bytes into the AudioEmitter — making it transparent to the rest of the
 voice pipeline (including tts.FallbackAdapter).
 """
 
 from __future__ import annotations
 
+import io
 import re
 import ssl
 import uuid
+import wave
 
 import certifi
 import httpx
@@ -35,8 +37,30 @@ _ORPHEUS_VOICES = ["troy", "austin", "daniel", "diana", "hannah", "autumn"]  # m
 _MAX_CHARS = 190               # Stay safely below Groq's 200-char limit
 _SAMPLE_RATE = 24_000          # Orpheus outputs 24 kHz wav
 _NUM_CHANNELS = 1
-_MIME_TYPE = "audio/wav"
-_WAV_HEADER_BYTES = 44         # Standard PCM WAV header size
+_MIME_TYPE = "audio/pcm"       # We push raw PCM after stripping WAV container
+
+# Module-level HTTP client for connection pooling
+_HTTP_CLIENT: httpx.AsyncClient | None = None
+
+
+async def _get_http_client() -> httpx.AsyncClient:
+    """Get or create a shared HTTP client with connection pooling."""
+    global _HTTP_CLIENT
+    if _HTTP_CLIENT is None or _HTTP_CLIENT.is_closed:
+        ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+        _HTTP_CLIENT = httpx.AsyncClient(
+            verify=ssl_ctx,
+            timeout=httpx.Timeout(connect=10.0, read=30.0, write=5.0, pool=10.0),
+        )
+    return _HTTP_CLIENT
+
+
+async def close_http_client() -> None:
+    """Close the shared HTTP client (called on shutdown)."""
+    global _HTTP_CLIENT
+    if _HTTP_CLIENT is not None and not _HTTP_CLIENT.is_closed:
+        await _HTTP_CLIENT.aclose()
+        _HTTP_CLIENT = None
 
 
 def _split_into_chunks(text: str, max_chars: int = _MAX_CHARS) -> list[str]:
@@ -99,7 +123,7 @@ class _OrpheusChunkedStream(ChunkedStream):
     ) -> None:
         super().__init__(tts=tts_instance, input_text=input_text, conn_options=conn_options)
 
-    async def _run(self, output_emitter: AudioEmitter) -> None:
+async def _run(self, output_emitter: AudioEmitter) -> None:
         chunks = _split_into_chunks(self._input_text)
         request_id = str(uuid.uuid4())
 
@@ -111,59 +135,71 @@ class _OrpheusChunkedStream(ChunkedStream):
             mime_type=_MIME_TYPE,
         )
 
-        ssl_ctx = ssl.create_default_context(cafile=certifi.where())
-        async with httpx.AsyncClient(
-            verify=ssl_ctx,
-            timeout=httpx.Timeout(connect=10.0, read=30.0, write=5.0, pool=10.0),
-        ) as client:
-            for chunk_text in chunks:
-                if not chunk_text:
+        client = await _get_http_client()
+        for chunk_text in chunks:
+            if not chunk_text:
+                continue
+
+            audio_pushed = False
+            for voice in _ORPHEUS_VOICES:
+                resp = await client.post(
+                    _GROQ_TTS_URL,
+                    headers={
+                        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": _ORPHEUS_MODEL,
+                        "voice": voice,
+                        "input": chunk_text,
+                        "response_format": "wav",
+                    },
+                )
+                if resp.status_code >= 400:
+                    err_body = resp.text[:200]
+                    # Model-level errors (terms, auth, quota) are shared across all voices
+                    if "model_terms_required" in err_body or "requires terms acceptance" in err_body:
+                        print(f"--> [TTS Groq] Model requires terms acceptance. Accept at https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english — skipping voice cycle, switching to ElevenLabs.")
+                        break
+                    # Invalid voice or input error — try next voice
+                    print(f"--> [TTS Groq Fallback] voice='{voice}' failed ({resp.status_code}): {err_body}")
                     continue
 
-                audio_pushed = False
-                for voice in _ORPHEUS_VOICES:
-                    resp = await client.post(
-                        _GROQ_TTS_URL,
-                        headers={
-                            "Authorization": f"Bearer {settings.GROQ_API_KEY}",
-                            "Content-Type": "application/json",
-                        },
-                        json={
-                            "model": _ORPHEUS_MODEL,
-                            "voice": voice,
-                            "input": chunk_text,
-                            "response_format": "wav",
-                        },
-                    )
-                    if resp.status_code >= 400:
-                        err_body = resp.text[:200]
-                        # Model-level errors (terms, auth, quota) are shared across all voices
-                        if "model_terms_required" in err_body or "requires terms acceptance" in err_body:
-                            print(f"--> [TTS Groq] Model requires terms acceptance. Accept at https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english — skipping voice cycle, switching to ElevenLabs.")
-                            break
-                        # Invalid voice or input error — try next voice
-                        print(f"--> [TTS Groq Fallback] voice='{voice}' failed ({resp.status_code}): {err_body}")
-                        continue
+                content_type = resp.headers.get("content-type", "")
+                if "audio/wav" not in content_type:
+                    print(f"--> [TTS Groq] Unexpected content-type '{content_type}' for voice='{voice}', trying next voice.")
+                    continue
 
-                    content_type = resp.headers.get("content-type", "")
-                    if "audio/wav" not in content_type:
-                        print(f"--> [TTS Groq] Unexpected content-type '{content_type}' for voice='{voice}', trying next voice.")
-                        continue
+                if not resp.content.startswith(b"RIFF"):
+                    print(f"--> [TTS Groq] Response does not start with RIFF header for voice='{voice}', skipping.")
+                    continue
 
-                    if not resp.content.startswith(b"RIFF"):
-                        print(f"--> [TTS Groq] Response does not start with RIFF header for voice='{voice}', skipping.")
-                        continue
+                try:
+                    # Parse WAV and extract raw PCM from the 'data' chunk
+                    with wave.open(io.BytesIO(resp.content), "rb") as wav_file:
+                        if wav_file.getnchannels() != _NUM_CHANNELS:
+                            print(f"--> [TTS Groq] Unexpected channel count {wav_file.getnchannels()} for voice='{voice}', expected {_NUM_CHANNELS}")
+                            continue
+                        if wav_file.getframerate() != _SAMPLE_RATE:
+                            print(f"--> [TTS Groq] Unexpected sample rate {wav_file.getframerate()} for voice='{voice}', expected {_SAMPLE_RATE}")
+                            continue
+                        if wav_file.getsampwidth() != 2:
+                            print(f"--> [TTS Groq] Unexpected sample width {wav_file.getsampwidth()} for voice='{voice}', expected 2 (16-bit PCM)")
+                            continue
+                        raw_pcm = wav_file.readframes(wav_file.getnframes())
+                except Exception as e:
+                    print(f"--> [TTS Groq] Failed to parse WAV for voice='{voice}': {e}")
+                    continue
 
-                    raw_pcm = resp.content[_WAV_HEADER_BYTES:]
-                    output_emitter.push(raw_pcm)
-                    audio_pushed = True
-                    break
+                output_emitter.push(raw_pcm)
+                audio_pushed = True
+                break
 
-                if not audio_pushed:
-                    raise RuntimeError(
-                        f"All Orpheus voices failed for chunk (input_len={len(chunk_text)}). "
-                        f"Triggering FallbackAdapter to switch to next TTS provider."
-                    )
+            if not audio_pushed:
+                raise RuntimeError(
+                    f"All Orpheus voices failed for chunk (input_len={len(chunk_text)}). "
+                    f"Triggering FallbackAdapter to switch to next TTS provider."
+                )
 
         output_emitter.flush()
 
