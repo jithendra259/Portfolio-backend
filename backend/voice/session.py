@@ -4,7 +4,7 @@ Voice Session Factory for LiveKit Voice Agent.
 STT:  Deepgram Flux (primary, built-in turn detection via STT)
       No local VAD — STT handles end-of-turn detection.
 
-TTS:  ElevenLabs Multilingual v2 (primary — reliable, no terms acceptance)
+TTS:  Groq Orpheus (primary — official LiveKit plugin)
 
 LLM:  Groq LPU (primary) → Google Gemini 2.5 Flash (agent-side FallbackAdapter)
 
@@ -21,7 +21,7 @@ from livekit.agents import (
     TurnHandlingOptions,
     text_transforms,
 )
-from livekit.plugins import deepgram, elevenlabs
+from livekit.plugins import deepgram, groq
 
 from api import build_llm_pipeline
 from config import settings
@@ -36,7 +36,7 @@ def create_voice_session(ctx: agents.JobContext | None = None) -> AgentSession:
     STT:  Deepgram Flux (STTv2) with built-in turn detection via STT
           vad=None — no local VAD inference, zero CPU cost for VAD
 
-    TTS:  ElevenLabs Multilingual v2 (primary)
+    TTS:  Groq Orpheus (primary — official livekit-plugins-groq)
 
     LLM:  Groq LPU (primary) → Google Gemini 2.5 Flash (fallback)
 
@@ -53,13 +53,12 @@ def create_voice_session(ctx: agents.JobContext | None = None) -> AgentSession:
         api_key=settings.DEEPGRAM_API_KEY,
     )
 
-    # ── TTS: ElevenLabs (primary only — Groq Orpheus fallback removed) ─────────
-    # LiveKit's ElevenLabs plugin expects ELEVEN_API_KEY env var.
-    # model="eleven_multilingual_v2" for quality, "eleven_turbo_v2_5" for lower latency.
-    tts_pipeline = elevenlabs.TTS(
-        model=settings.TTS_MODEL,
-        voice_id=settings.TTS_VOICE_ID,
-        api_key=settings.ELEVEN_API_KEY,
+    # ── TTS: Groq Orpheus (primary — official livekit-plugins-groq) ─────────────
+    # Uses GROQ_API_KEY from environment (same as LLM).
+    # Model: canopylabs/orpheus-v1-english, Voice: autumn (default)
+    tts_pipeline = groq.TTS(
+        model=settings.GROQ_TTS_MODEL,
+        voice=settings.GROQ_TTS_VOICE,
     )
 
 

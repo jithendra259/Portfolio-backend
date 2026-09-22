@@ -17,13 +17,15 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      - key: GROQ_TTS_MODEL
+        sync: false
+      - key: GROQ_TTS_VOICE
+        sync: false
       - key: GOOGLE_API_KEY
         sync: false
       - key: DEEPGRAM_API_KEY
         sync: false
       - key: CARTESIA_API_KEY
-        sync: false
-      - key: ELEVENLABS_API_KEY
         sync: false
       - key: SUPABASE_URL
         sync: false
