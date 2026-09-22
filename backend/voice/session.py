@@ -3,7 +3,7 @@ Voice Session Factory for LiveKit Voice Agent.
 
 STT:  Groq Whisper Large V3 (primary, OpenAI-compatible API)
       → Deepgram Nova-3 (fallback, requires DEEPGRAM_API_KEY)
-      → AssemblyAI (fallback, requires ASSEMBLYAI_API_KEY)
+      Uses Silero VAD for StreamAdapter wrapping.
 
 TTS:  ElevenLabs Multilingual v2 (primary — reliable, no terms acceptance)
       → Groq Orpheus (fallback, requires terms acceptance at console.groq.com)
@@ -49,6 +49,13 @@ def create_voice_session(ctx: agents.JobContext | None = None) -> AgentSession:
           backchannel_boundary=(1.0, 2.0) — extra 2s end-window for Deepgram transcript latency
           Preemptive LLM generation (no preemptive TTS — saves Render CPU)
     """
+    # ── VAD for STT FallbackAdapter (required for non-streaming STTs like Groq Whisper) ───
+    stt_vad = inference.VAD(
+        model="silero",
+        min_speech_duration=0.1,
+        min_silence_duration=0.5,
+    )
+
     # ── STT Pipeline with Fallback ─────────────────────────────────────────────
     stt_providers = [
         openai.STT(
@@ -68,7 +75,11 @@ def create_voice_session(ctx: agents.JobContext | None = None) -> AgentSession:
             )
         )
 
-    stt_pipeline = stt.FallbackAdapter(stt_providers) if len(stt_providers) > 1 else stt_providers[0]
+    stt_pipeline = (
+        stt.FallbackAdapter(stt_providers, vad=stt_vad)
+        if len(stt_providers) > 1
+        else stt.StreamAdapter(stt=stt_providers[0], vad=stt_vad)
+    )
 
     # ── TTS Pipeline with Fallback ─────────────────────────────────────────────
     # ElevenLabs first (reliable, no terms acceptance needed)
