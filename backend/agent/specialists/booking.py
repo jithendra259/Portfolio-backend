@@ -16,21 +16,22 @@ from prompts.response_policy import COMMON_RESPONSE_POLICY
 from agent.supabase_logger import log_booking_lead
 
 BOOKING_INSTRUCTIONS = f"""You are Kandula Jithendra Subramanyam's Recruiter Relations & Booking Specialist.
-Your mission is to make scheduling an interview, coffee chat, or research discussion completely effortless.
+Make scheduling an interview, coffee chat, or research discussion effortless.
 
 ### OBJECTIVES:
-1. Warmly confirm the visitor's intent to connect with Jithendra.
-2. Ensure the visitor's screen is viewing the booking interface (`navigate_portfolio(target='book_appointment')`).
-3. Collect details in a natural conversational flow, one field at a time if needed:
-   - Full Name → use `update_visitor_info` to remember it
-   - Email address → use `update_visitor_info` to remember it
-   - Topic of discussion (e.g., Senior AI / Quant Researcher role, collaboration)
-   - Preferred date and time
-4. Once all three required fields (name, email, topic) are known, call `confirm_booking` to log the appointment into Supabase.
-   - `confirm_booking` automatically pulls missing fields from prior conversation context, so only pass what the visitor just said.
-   - If `confirm_booking` returns a follow-up question, relay it to the visitor.
-5. If the visitor wants to review more portfolio work first, call `transfer_to_greeter`.
-\n{COMMON_RESPONSE_POLICY}
+1. Confirm the visitor's intent to connect with Jithendra.
+2. Immediately navigate to the booking interface: `navigate_portfolio(target='book_appointment')`.
+3. Collect details conversationally, one field at a time:
+   - Full Name → `update_visitor_info`
+   - Email address → `update_visitor_info`
+   - Topic (e.g., Senior AI Researcher role, portfolio collaboration, speaking engagement)
+   - Preferred date/time (optional, defaults to Flexible)
+4. Once name, email, and topic are known, call `confirm_booking` to log to Supabase.
+   - Missing fields pulled from context automatically.
+   - If it returns a follow-up question, relay it verbatim.
+5. If visitor wants to explore portfolio first: `transfer_to_greeter`.
+6. Professional tone: concise, warm, respectful of time.
+{COMMON_RESPONSE_POLICY}
 """
 
 
@@ -46,17 +47,17 @@ class BookingSpecialist(PortfolioBaseAgent):
         @llm.function_tool(
             description=(
                 "Confirm and save a recruiter meeting, job interview, or collaboration inquiry. "
-                "All details are optional — missing fields are pulled from prior conversation context. "
+                "All details optional — missing fields pulled from conversation context. "
                 "Returns a follow-up question if any required field (name, email, topic) is missing."
             )
         )
         async def confirm_booking(
-            name: Annotated[str, "Visitor's full name. Empty if already provided earlier in the conversation."] = "",
-            email: Annotated[str, "Visitor's email address. Empty if already provided earlier in the conversation."] = "",
-            topic: Annotated[str, "Meeting topic or job role opportunity (e.g., 'Senior AI Researcher', 'portfolio collaboration')."] = "",
-            preferred_date: Annotated[str, "Preferred date for the meeting (e.g., 'next Tuesday', 'Oct 15'). Defaults to 'Flexible'."] = "Flexible",
+            name: Annotated[str, "Visitor's full name. Empty if already provided earlier."] = "",
+            email: Annotated[str, "Visitor's email address. Empty if already provided earlier."] = "",
+            topic: Annotated[str, "Meeting topic or job role (e.g., 'Senior AI Researcher', 'portfolio collaboration')."] = "",
+            preferred_date: Annotated[str, "Preferred date (e.g., 'next Tuesday', 'Oct 15'). Defaults to 'Flexible'."] = "Flexible",
             preferred_time: Annotated[str, "Preferred time slot (e.g., '2pm IST', '10am UTC'). Defaults to 'Flexible'."] = "Flexible",
-            notes: Annotated[str, "Any special notes, job requirements, or resume link."] = "",
+            notes: Annotated[str, "Special notes, job requirements, or resume link."] = "",
         ) -> str:
             """Records recruiter appointment into Supabase and broadcasts confirmation."""
             prev = userdata.booking_details or {}
@@ -77,10 +78,8 @@ class BookingSpecialist(PortfolioBaseAgent):
             if not topic:
                 return "What would you like to discuss? (e.g., AI Engineering role, research collaboration, speaking opportunity)"
 
-            # Persist visitor info for cross-agent continuity
             userdata.set_visitor(name=name, email=email)
 
-            # Store accumulated booking details
             userdata.booking_details = {
                 "name": name,
                 "email": email,
@@ -90,7 +89,6 @@ class BookingSpecialist(PortfolioBaseAgent):
                 "notes": notes,
             }
 
-            # Asynchronous non-blocking write to Supabase
             log_booking_lead(
                 visitor_name=name,
                 email=email,
@@ -101,7 +99,6 @@ class BookingSpecialist(PortfolioBaseAgent):
                 session_id=userdata.session_id,
             )
 
-            # Broadcast confirmation event to frontend over data channel
             room = get_room()
             if room and room.local_participant:
                 try:
@@ -116,7 +113,7 @@ class BookingSpecialist(PortfolioBaseAgent):
             return (
                 f"Booking confirmed for {name} ({email}) regarding '{topic}' "
                 f"on {preferred_date} at {preferred_time}. "
-                "The lead has been recorded, and Jithendra will follow up promptly."
+                "The lead is recorded and Jithendra will follow up promptly."
             )
 
         all_tools = list(tools) + [confirm_booking]
@@ -130,10 +127,8 @@ class BookingSpecialist(PortfolioBaseAgent):
         )
 
     async def on_enter(self) -> None:
-        """Navigates to booking page and offers help upon handoff."""
         await super().on_enter()
         try:
-            # Auto-navigate screen to booking page
             room = self._get_room()
             if room and room.local_participant:
                 payload = json.dumps({"type": "navigate", "target": "book_appointment"})
