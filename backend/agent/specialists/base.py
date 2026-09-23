@@ -152,6 +152,12 @@ class PortfolioBaseAgent(Agent):
 
         user_text = new_message.text_content.strip()
         self.last_user_query = user_text
+        
+        # LOG: User speech
+        print(f"\n{'='*60}")
+        print(f"👤 USER ({self.agent_name}): {user_text}")
+        print(f"{'='*60}\n")
+        
         start_time = time.time()
 
         # Clean any extra content from previous turns
@@ -258,6 +264,11 @@ class PortfolioBaseAgent(Agent):
         # Update conversation summary with this exchange
         if response_text.strip() and self.last_user_query:
             self.update_conversation_summary(self.last_user_query, response_text.strip())
+            
+            # LOG: Agent response
+            print(f"\n{'='*60}")
+            print(f"🤖 AGENT ({self.agent_name}): {response_text.strip()}")
+            print(f"{'='*60}\n")
 
         tool_names = [tool.name for tool in called_tools]
         if not has_text:

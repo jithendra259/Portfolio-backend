@@ -107,6 +107,16 @@ async def my_agent(ctx: agents.JobContext) -> None:
         except (UnicodeDecodeError, json.JSONDecodeError, AttributeError) as error:
             print(f"--> [Server Warning] Invalid client page context: {error}")
 
+    # Log data channel messages SENT by agent to frontend
+    @ctx.room.local_participant.on("data_published")
+    def on_data_published(publication) -> None:
+        try:
+            topic = getattr(publication, "topic", "unknown")
+            # Note: We can't easily get the payload here, but we log the topic
+            print(f"--> [Server] Agent published to '{topic}'")
+        except Exception as e:
+            print(f"--> [Server] Data publish log error: {e}")
+
     await session.start(
         room=ctx.room,
         agent=greeter,
