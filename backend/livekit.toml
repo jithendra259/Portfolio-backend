@@ -1,32 +1,5 @@
 [project]
-subdomain = "portfolio-jezy7ize"
+  subdomain = "finalportfolio-oupyq216"
 
 [agent]
-id = "my-agent"
-name = "Jithendra Portfolio Voice Agent"
-
-[build]
-dockerfile = "Dockerfile"
-context = "."
-
-[deploy]
-region = "ap-south"
-min_replicas = 1
-max_replicas = 2
-
-[resources]
-cpu = 1000
-memory = 1024
-
-[env]
-# LiveKit Cloud auto-injects these at runtime:
-# LIVEKIT_URL
-# LIVEKIT_API_KEY
-# LIVEKIT_API_SECRET
-
-# External service keys (add via `lk agent create --secrets-file secrets.env`):
-# DEEPGRAM_API_KEY
-# GROQ_API_KEY
-# GOOGLE_API_KEY
-# SUPABASE_URL
-# SUPABASE_KEY
+  id = "CA_e2JJMRRphtUd"
