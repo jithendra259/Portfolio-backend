@@ -234,5 +234,27 @@ def build_full_corpus() -> list[KnowledgeChunk]:
     page_chunks = load_page_and_profile_knowledge()
     corpus.extend(page_chunks)
 
-    print(f"--> [Corpus Builder] Built corpus with {len(corpus)} chunks ({len(pdf_chunks)} from PDFs, {len(page_chunks)} from Web/Profile).")
+    # 3. Detailed Factual Metrics for Precise RAG Retrieval
+    from prompts.knowledge import DETAILED_METRICS
+    for metric_id, metric_data in DETAILED_METRICS.items():
+        text = (
+            f"Metric: {metric_id}. "
+            f"Value: {metric_data.get('value', 'N/A')}. "
+            f"Description: {metric_data.get('description', 'N/A')}. "
+            f"Source: {metric_data.get('source', 'N/A')}. "
+            f"Paper: {metric_data.get('paper_id', 'N/A')}."
+        )
+        corpus.append(
+            KnowledgeChunk(
+                id=f"metric_{metric_id}",
+                source=metric_data.get("source", "Portfolio Metrics"),
+                title=f"Metric: {metric_id}",
+                section="Detailed Metrics",
+                category="metrics",
+                text=text,
+                keywords=["metric", metric_id, metric_data.get("paper_id", "")] + metric_data.get("value", "").split(),
+            )
+        )
+
+    print(f"--> [Corpus Builder] Built corpus with {len(corpus)} chunks ({len(pdf_chunks)} from PDFs, {len(page_chunks)} from Web/Profile, {len(DETAILED_METRICS)} metrics).")
     return corpus

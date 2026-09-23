@@ -19,7 +19,12 @@ from livekit import agents
 from livekit.agents import (
     AgentSession,
     TurnHandlingOptions,
+    inference,
     text_transforms,
+    tts,
+    BackgroundAudioPlayer,
+    BuiltinAudioClip,
+    AudioConfig,
 )
 from livekit.plugins import deepgram, groq
 
@@ -44,40 +49,61 @@ def create_voice_session(ctx: agents.JobContext | None = None) -> AgentSession:
           Adaptive interruption via LiveKit Cloud inference
           Preemptive LLM generation (no preemptive TTS)
     """
-    # ── STT: Deepgram Flux with STT-based turn detection ───────────────────────
-    # Flux has built-in end-of-turn detection; no local VAD needed.
-    # This eliminates the CPU starvation that Silero VAD caused on Render 0.1 vCPU.
-    # Note: STTv2 doesn't accept 'language' param; model="flux-general-en" selects English.
-    stt_pipeline = deepgram.STTv2(
-        model="flux-general-en",
+    # ── STT: Deepgram Nova-3 (official LiveKit streaming STT with interim results) ──
+    stt_pipeline = deepgram.STT(
+        model="nova-3",
+        language=settings.STT_LANGUAGE if settings.STT_LANGUAGE != "en" else "en-US",
         api_key=settings.DEEPGRAM_API_KEY,
+        smart_format=True,
+        punctuate=True,
+        interim_results=True,
     )
 
-    # ── TTS: Groq Orpheus (primary — official livekit-plugins-groq) ─────────────
-    # Uses GROQ_API_KEY from environment (same as LLM).
-    # Model: canopylabs/orpheus-v1-english, Voice: autumn (default)
-    tts_pipeline = groq.TTS(
-        model=settings.GROQ_TTS_MODEL,
-        voice=settings.GROQ_TTS_VOICE,
+    # ── TTS: Deepgram Aura (primary, fast & reliable) -> Groq Orpheus (fallback) ───
+    tts_candidates = []
+    if settings.DEEPGRAM_API_KEY:
+        tts_candidates.append(
+            deepgram.TTS(
+                model=settings.DEEPGRAM_TTS_MODEL,
+                api_key=settings.DEEPGRAM_API_KEY,
+            )
+        )
+    if settings.GROQ_API_KEY:
+        tts_candidates.append(
+            groq.TTS(
+                model=settings.GROQ_TTS_MODEL,
+                voice=settings.GROQ_TTS_VOICE,
+            )
+        )
+
+    if len(tts_candidates) > 1:
+        tts_pipeline = tts.FallbackAdapter(tts=tts_candidates, max_retry_per_tts=1)
+    elif len(tts_candidates) == 1:
+        tts_pipeline = tts_candidates[0]
+    else:
+        tts_pipeline = deepgram.TTS()
+
+    # ── Background Audio: Thinking sounds during tool calls ─────────────────────────
+    background_audio = BackgroundAudioPlayer(
+        thinking_sound=[
+            AudioConfig(BuiltinAudioClip.KEYBOARD_TYPING, volume=0.6, probability=0.5),
+            AudioConfig(BuiltinAudioClip.KEYBOARD_TYPING2, volume=0.5, probability=0.3),
+        ],
     )
 
-
-    return AgentSession(
+    session = AgentSession(
         stt=stt_pipeline,
         llm=build_llm_pipeline(),
         tts=tts_pipeline,
 
-        # ── Turn handling: STT-based detection + adaptive interruption ──────────
+        # ── Turn handling: Official LiveKit Cloud TurnDetector ───────────────────
         turn_handling=TurnHandlingOptions(
-            # Use Deepgram Flux's built-in STT turn detection instead of local VAD
-            turn_detection="stt",
+            turn_detection=inference.TurnDetector(version=settings.TURN_DETECTOR_VERSION),
             endpointing={
                 "min_delay": settings.MIN_ENDPOINTING_DELAY,
                 "max_delay": settings.MAX_ENDPOINTING_DELAY,
             },
             interruption={
-                # Adaptive mode: LiveKit Cloud inference model distinguishes real barge-ins
-                # from conversational backchannels ("uh-huh", "ok", "right", "sure")
                 "mode": "adaptive",
                 "min_duration": 0.5,
                 "min_words": 0,
@@ -97,7 +123,6 @@ def create_voice_session(ctx: agents.JobContext | None = None) -> AgentSession:
             },
         ),
         user_away_timeout=settings.USER_AWAY_TIMEOUT,
-        # Disable TTS-aligned transcript: avoids expensive FFT processing on Render 0.1 vCPU
         use_tts_aligned_transcript=False,
         tts_text_transforms=[
             "filter_emoji",
@@ -105,3 +130,10 @@ def create_voice_session(ctx: agents.JobContext | None = None) -> AgentSession:
             text_transforms.replace(PRONUNCIATION_REPLACEMENTS),
         ],
     )
+
+    # Start background audio player (thinking sounds during tool calls)
+    if ctx:
+        import asyncio
+        asyncio.create_task(background_audio.start(room=ctx.room, agent_session=session))
+
+    return session

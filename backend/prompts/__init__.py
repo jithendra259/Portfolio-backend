@@ -4,6 +4,7 @@ Prompts and Knowledge package for Jithendra's Portfolio AI.
 
 from .knowledge import (
     BIOGRAPHY,
+    COMPETITIVE_EXAMS,
     EDUCATION,
     PUBLICATIONS,
     PROJECTS,
@@ -16,6 +17,7 @@ from .system_prompt import SYSTEM_INSTRUCTIONS, build_system_instructions
 
 __all__ = [
     "BIOGRAPHY",
+    "COMPETITIVE_EXAMS",
     "EDUCATION",
     "PUBLICATIONS",
     "PROJECTS",

@@ -26,14 +26,11 @@ async def broadcast_navigation(room: rtc.Room | None, target: str) -> str:
     return f"Navigation requested for {target}."
 
 
-from prompts.knowledge.pages import (
-    get_formatted_section_explanation,
-    get_section_knowledge,
-)
+from prompts.knowledge.pages import get_formatted_section_explanation
 
 
 class NavigationToolset(llm.Toolset):
-    """Modular toolset for real-time frontend screen navigation, subsection scrolling, and section awareness."""
+    """Modular toolset for real-time frontend screen navigation."""
 
     def __init__(
         self,
@@ -42,7 +39,7 @@ class NavigationToolset(llm.Toolset):
     ) -> None:
 
         @llm.function_tool(
-            description="Navigate visitor's screen in real time to any section ('contact', 'skills', 'projects', 'research', 'experience', 'about', 'home', 'book_appointment', or case study name)."
+            description="Navigate screen to any section: 'contact', 'skills', 'projects', 'research', 'experience', 'about', 'home', 'book_appointment', or case study name."
         )
         async def navigate_portfolio(
             target: Annotated[str, "Target section, page, or case study name."],
@@ -54,42 +51,11 @@ class NavigationToolset(llm.Toolset):
             explanation = get_formatted_section_explanation(clean_target)
             return f"Navigated screen to {clean_target}. Details: {explanation}"
 
-        @llm.function_tool(
-            description="Explain what a portfolio section or subsection contains."
-        )
-        async def explain_section(
-            section_name: Annotated[str, "Name of the section (e.g. 'contact', 'skills', 'research')."],
-        ) -> str:
-            """Provides explanation of what a section tells."""
-            return get_formatted_section_explanation(section_name)
-
-        @llm.function_tool(
-            description="Query what page or case study the visitor is currently viewing."
-        )
-        async def get_current_page_context() -> str:
-            """Inspects and returns the visitor's current screen and page context concisely."""
-            assistant = get_assistant() if get_assistant else None
-            if assistant and hasattr(assistant, "get_formatted_page_context"):
-                context_str = assistant.get_formatted_page_context()
-                print(f"--> [Agent Tool] get_current_page_context: {context_str[:120]}...")
-                return context_str
-            return "The visitor is on the main portfolio page (/)."
-
-        @llm.function_tool(
-            description="List portfolio sections and case studies available to view."
-        )
-        async def list_portfolio_pages() -> str:
-            """Returns directory of available sections."""
-            return "Sections: home, about, research, projects, skills, experience, certificates, resume, contact. Booking: /book-appointment."
-
-        super().__init__(
-            id="navigation",
-            tools=[navigate_portfolio, explain_section, get_current_page_context, list_portfolio_pages],
-        )
+        super().__init__(id="navigation", tools=[navigate_portfolio])
 
 
 class ResearchToolset(llm.Toolset):
-    """Modular toolset for deep mathematical analysis and peer-reviewed publication breakdowns."""
+    """Modular toolset for deep mathematical analysis and publication retrieval."""
 
     def __init__(
         self,
@@ -100,34 +66,26 @@ class ResearchToolset(llm.Toolset):
         from .reasoner import ResearchReasoner
 
         @llm.function_tool(
-            description=(
-                "Perform in-depth technical analysis and mathematical breakdowns for Jithendra's 3 research papers "
-                "(Elsevier EAAI, Springer Nature LNCS, Elsevier COR) or engineering projects (AQI Forecasting, Swarm Robotics). "
-                "Provides mathematical formulations (G-CVaR, Ledoit-Wolf alpha=0.42, CLARABEL interior-point SOCP solver), "
-                "architecture graphs, and citation details while speaking natural fillers."
-            )
+            description="Technical analysis and mathematical breakdown for papers (EAAI, LNCS, COR) or engineering projects."
         )
         async def research_paper_deep_dive(
             topic: Annotated[
                 str,
-                "The research paper title, mathematical concept (e.g. G-CVaR, Ledoit-Wolf, CLARABEL), or project name.",
+                "Paper title, mathematical concept (e.g. G-CVaR, Ledoit-Wolf, CLARABEL), or project name.",
             ],
         ) -> str:
-            """Executes background research reasoner with non-blocking spoken filler."""
+            """Executes background research reasoner with spoken filler."""
             session = get_session()
             room = get_room()
             return await ResearchReasoner.analyze_topic(session, room, topic)
 
         @llm.function_tool(
-            description=(
-                "Query and retrieve a precise factual metric or formulation from Jithendra's research papers "
-                "or engineering specifications. Returns a concise single-fact answer (under 160 chars)."
-            )
+            description="Retrieve specific factual metrics, formulas, or citations from publications or project docs."
         )
         async def semantic_knowledge_search(
             query: Annotated[
                 str,
-                "The technical question or topic to retrieve a specific metric or formulation for.",
+                "Technical question or metric to look up.",
             ],
         ) -> str:
             """Executes vector retrieval returning only the single top fact."""
@@ -153,10 +111,7 @@ class ResourceToolset(llm.Toolset):
 
     def __init__(self, get_room: Callable[[], rtc.Room | None]) -> None:
         @llm.function_tool(
-            description=(
-                "Download a public portfolio resource in the visitor's browser. "
-                "Supported resources: resume, research, certificates, aqi_report, and swarm_report."
-            )
+            description="Download a document: resume, research, certificates, aqi_report, or swarm_report."
         )
         async def download_resource(
             resource: Annotated[
@@ -191,13 +146,10 @@ class ThemeToolset(llm.Toolset):
 
     def __init__(self, get_room: Callable[[], rtc.Room | None]) -> None:
         @llm.function_tool(
-            description=(
-                "Change the portfolio appearance when the visitor asks for dark mode, light mode, "
-                "night mode, or day mode. The theme must be exactly dark or light."
-            )
+            description="Switch portfolio theme between 'dark' and 'light'."
         )
         async def set_theme(
-            theme: Annotated[str, "The requested theme: dark or light."],
+            theme: Annotated[str, "Theme: dark or light."],
         ) -> str:
             selected_theme = theme.strip().lower()
             if selected_theme not in {"dark", "light"}:

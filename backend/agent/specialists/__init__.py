@@ -39,14 +39,38 @@ def create_multi_agent_system(
     resource_toolset = ResourceToolset(get_room)
     theme_toolset = ThemeToolset(get_room)
 
-    # 2. Handoff tools bound to session and userdata
-    handoff_tools = create_handoff_tools(userdata, get_session)
+    # 2. Scoped handoff tools
+    handoff_map = create_handoff_tools(userdata, get_session)
 
-    # 3. Assemble agent tool allocations
-    greeter_tools = [nav_toolset, resource_toolset, theme_toolset] + handoff_tools
-    research_tools = [research_toolset, nav_toolset] + handoff_tools
-    engineering_tools = [research_toolset, resource_toolset, nav_toolset] + handoff_tools
-    booking_tools = [nav_toolset] + handoff_tools
+    # 3. Assemble lean, role-specific agent tool allocations (minimizes token usage)
+    greeter_tools = [
+        nav_toolset,
+        resource_toolset,
+        theme_toolset,
+        handoff_map["research"],
+        handoff_map["engineering"],
+        handoff_map["booking"],
+    ]
+    research_tools = [
+        nav_toolset,
+        research_toolset,
+        handoff_map["greeter"],
+        handoff_map["engineering"],
+        handoff_map["booking"],
+    ]
+    engineering_tools = [
+        nav_toolset,
+        research_toolset,
+        resource_toolset,
+        handoff_map["greeter"],
+        handoff_map["research"],
+        handoff_map["booking"],
+    ]
+    booking_tools = [
+        nav_toolset,
+        handoff_map["visitor_info"],
+        handoff_map["greeter"],
+    ]
 
     # 4. Instantiate specialist agents
     greeter = PortfolioGreeter(tools=greeter_tools, userdata=userdata, get_room=get_room)
