@@ -28,8 +28,8 @@ Browser (Frontend) ──w──> LiveKit Cloud (WebRTC signaling + media)
 
 | Key | Value (production) | Purpose |
 |---|---|---|
-| `LIVEKIT_URL` | `wss://portfolio-jezy7ize.livekit.cloud` | LiveKit Cloud project WebSocket |
-| `LIVEKIT_API_KEY` | `APIbRAUawrxisqw` | LiveKit API key |
+| `LIVEKIT_URL` | `wss://finalportfolio-oupyq216.livekit.cloud` | LiveKit Cloud project WebSocket |
+| `LIVEKIT_API_KEY` | `APIpNgBX9wyBxtW` | LiveKit API key |
 | `LIVEKIT_API_SECRET` | (secret) | LiveKit API secret |
 | `PORT` | `10000` | Render HTTP port |
 | `NEXT_PUBLIC_RENDER_BACKEND_URL` | `https://portfolio-backend-ljlv.onrender.com` | Backend public URL (health ping / room creation) |

@@ -47,7 +47,7 @@ def _patched_http_server_init(self, *args, **kwargs):
 # Apply the monkey-patch before AgentServer is instantiated
 _http_server_module.HttpServer.__init__ = _patched_http_server_init
 
-# Configure AgentServer with thread executor, generous init timeout, and prewarm routine
+# Configure AgentServer with thread executor, generous init timeout, prewarm routine, and clean INFO logging
 server = AgentServer(
     port=settings.PORT,
     host=settings.HOST,
@@ -58,6 +58,7 @@ server = AgentServer(
     initialize_process_timeout=120.0,
     shutdown_process_timeout=30.0,
     setup_fnc=prewarm_voice_pipeline,
+    log_level="INFO",
 )
 
 # No separate aiohttp health server needed — routes are injected into AgentServer's HTTP interface
@@ -106,16 +107,6 @@ async def my_agent(ctx: agents.JobContext) -> None:
                 print(f"--> [Server] Visitor page context: {pathname} (title: {title})")
         except (UnicodeDecodeError, json.JSONDecodeError, AttributeError) as error:
             print(f"--> [Server Warning] Invalid client page context: {error}")
-
-    # Log data channel messages SENT by agent to frontend
-    @ctx.room.local_participant.on("data_published")
-    def on_data_published(publication) -> None:
-        try:
-            topic = getattr(publication, "topic", "unknown")
-            # Note: We can't easily get the payload here, but we log the topic
-            print(f"--> [Server] Agent published to '{topic}'")
-        except Exception as e:
-            print(f"--> [Server] Data publish log error: {e}")
 
     await session.start(
         room=ctx.room,

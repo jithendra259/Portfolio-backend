@@ -12,13 +12,11 @@ from livekit.agents import llm
 
 from .base import PortfolioBaseAgent
 from .userdata import PortfolioUserData
-from prompts.response_policy import COMMON_RESPONSE_POLICY
+from prompts import SYSTEM_INSTRUCTIONS, get_specialist_instructions
 from agent.supabase_logger import log_booking_lead
 
-BOOKING_INSTRUCTIONS = f"""You are Kandula Jithendra Subramanyam's Recruiter Relations & Booking Specialist.
-Make scheduling an interview, coffee chat, or research discussion effortless.
-
-### OBJECTIVES:
+BOOKING_ROLE_INSTRUCTIONS = """
+### BOOKING SPECIALIST ROLE:
 1. Confirm the visitor's intent to connect with Jithendra.
 2. Immediately navigate to the booking interface: `navigate_portfolio(target='book_appointment')`.
 3. Collect details conversationally, one field at a time:
@@ -31,7 +29,6 @@ Make scheduling an interview, coffee chat, or research discussion effortless.
    - If it returns a follow-up question, relay it verbatim.
 5. If visitor wants to explore portfolio first: `transfer_to_greeter`.
 6. Professional tone: concise, warm, respectful of time.
-{COMMON_RESPONSE_POLICY}
 """
 
 
@@ -117,10 +114,11 @@ class BookingSpecialist(PortfolioBaseAgent):
             )
 
         all_tools = list(tools) + [confirm_booking]
+        instructions = SYSTEM_INSTRUCTIONS + BOOKING_ROLE_INSTRUCTIONS
 
         super().__init__(
             agent_name="booking",
-            instructions=BOOKING_INSTRUCTIONS,
+            instructions=instructions,
             tools=all_tools,
             userdata=userdata,
             get_room=get_room,

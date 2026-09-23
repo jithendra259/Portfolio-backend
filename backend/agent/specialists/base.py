@@ -17,10 +17,18 @@ from livekit.agents import (
     UserTurnExceededEvent,
     llm,
 )
+from livekit.agents.voice.agent import NOT_GIVEN
 
 from agent.graph import route_portfolio_query
 from agent.supabase_logger import log_turn
 from .userdata import PortfolioUserData
+from prompts import (
+    get_full_system_prompt,
+    get_specialist_instructions,
+    build_section_context_prompt,
+    build_publication_context_prompt,
+    build_project_context_prompt,
+)
 
 
 class PortfolioBaseAgent(Agent):
@@ -52,53 +60,41 @@ class PortfolioBaseAgent(Agent):
 
     async def on_enter(self) -> None:
         """
-        Lifecycle hook invoked when this agent becomes active.
-        Preserves relevant conversation context while keeping it focused.
+        Lifecycle hook called upon agent handoff or initial entry.
+        Executes bounded context migration and updates Supabase session state.
+        Injects dynamic specialist prompt with active screen context.
         """
         print(f"--> [Agent Lifecycle] Entered '{self.agent_name}' specialist.")
 
-        # 1. Scoped Need-to-Know Handoff: Receive specific task + conversation summary
-        if self.userdata.pending_handoff and self.userdata.pending_handoff.target == self.agent_name:
-            handoff = self.userdata.pending_handoff
+        handoff = self.userdata.pending_handoff
+        if handoff and handoff.target == self.agent_name:
             self.userdata.pending_handoff = None
-
             new_ctx = self.chat_ctx.copy()
-            new_ctx.items.clear()
-            
-            # Build context with conversation summary + current task
-            context_parts = [
-                f"[Task Directive: You are the {self.agent_name.capitalize()} Specialist. "
-                f"Address the visitor's specific query: '{handoff.reason}'. "
-                f"Active screen: {handoff.active_screen}.]",
-            ]
-            
-            if self.conversation_summary:
-                context_parts.append(f"[Conversation so far: {self.conversation_summary}]")
-            
-            if handoff.last_user_query:
-                context_parts.append(f"Visitor just asked: '{handoff.last_user_query}'")
 
-            new_ctx.add_message(role="system", content="\n".join(context_parts))
+            # Use dynamic specialist prompt with active screen context
+            specialist_prompt = self.get_specialist_prompt()
+            full_context = f"[Task Directive: {specialist_prompt}\n\nAddress the visitor's specific query: '{handoff.reason}'. Active screen: {handoff.active_screen}.]"
+
+            new_ctx.add_message(role="system", content=full_context)
 
             if handoff.last_user_query:
                 new_ctx.add_message(role="user", content=handoff.last_user_query)
-            self.update_chat_ctx(new_ctx)
+            await self.update_chat_ctx(new_ctx)
         else:
-            # 2. Continuity: Carry forward relevant context from previous agent
+            # Continuity: Carry forward relevant context from previous agent
             prev_agent = self.userdata.prev_agent
             if prev_agent and hasattr(prev_agent, "chat_ctx") and prev_agent.chat_ctx:
                 try:
-                    # Keep last 6 items (3 exchanges) for continuity
                     copied_ctx = prev_agent.chat_ctx.copy(
                         exclude_handoff=True,
                         exclude_config_update=True,
                         exclude_instructions=True,
-                    ).truncate(max_items=6)
+                    ).truncate(max_items=4)
                     new_ctx = self.chat_ctx.copy()
                     for item in copied_ctx.items:
                         if item not in new_ctx.items:
                             new_ctx.items.append(item)
-                    self.update_chat_ctx(new_ctx)
+                    await self.update_chat_ctx(new_ctx)
                 except Exception as err:
                     print(f"--> [Context Preservation Warning] {err}")
 
@@ -131,6 +127,36 @@ class PortfolioBaseAgent(Agent):
             return f"Viewing '{title}' ({path}): {summary}"
         return f"Viewing page '{path}'."
 
+    def get_dynamic_system_prompt(self) -> str:
+        """
+        Returns a dynamic, context-aware system prompt based on:
+        - Active screen/section
+        - Current specialist role
+        - Recent conversation topics
+        """
+        active_screen = self.userdata.active_screen or "/"
+        active_title = self.userdata.active_title or ""
+        
+        # Get recent topics from conversation summary
+        recent_topics = []
+        if self.conversation_summary:
+            # Extract potential topics from recent exchanges
+            for word in self.conversation_summary.split():
+                if word.startswith("case_study_") or word in ["research", "projects", "skills", "experience"]:
+                    recent_topics.append(word)
+        
+        # Build full dynamic prompt
+        return get_full_system_prompt(
+            active_screen=active_screen,
+            active_title=active_title,
+            recent_topics=recent_topics[-3:] if recent_topics else None
+        )
+
+    def get_specialist_prompt(self) -> str:
+        """Returns specialist-specific dynamic prompt with active screen context."""
+        active_screen = self.userdata.active_screen or "/"
+        return get_specialist_instructions(self.agent_name, active_screen)
+
     def _clean_extra(self, ctx: Optional[llm.ChatContext] = None) -> None:
         """Strips extra metadata dictionaries so LiveKit serializer never produces extra_content."""
         target_ctx = ctx or self.chat_ctx
@@ -145,19 +171,19 @@ class PortfolioBaseAgent(Agent):
     ) -> None:
         """
         Lifecycle hook called when user finishes speaking.
-        Injects screen context, conversation history, and routing grounding.
+        Injects screen context and routing grounding with minimal token footprint.
         """
         if not new_message.text_content or not new_message.text_content.strip():
             raise StopResponse()
 
         user_text = new_message.text_content.strip()
         self.last_user_query = user_text
-        
+
         # LOG: User speech
         print(f"\n{'='*60}")
         print(f"👤 USER ({self.agent_name}): {user_text}")
         print(f"{'='*60}\n")
-        
+
         start_time = time.time()
 
         # Clean any extra content from previous turns
@@ -176,36 +202,65 @@ class PortfolioBaseAgent(Agent):
         if user_intent or user_exp:
             print(f"--> [{self.agent_name} Thinking] Intent: '{user_intent}' | Mode: '{mode}' | Expects: '{user_exp}'")
 
-        # Build comprehensive context injection
+        # Lean context injection to keep token count strictly under Groq's 8000 TPM limit
         context_injection_parts = []
-        
-        # 1. Screen awareness (always relevant)
+
+        # 1. Screen awareness
         screen_context = self.get_formatted_page_context()
         context_injection_parts.append(f"[Current Screen: {screen_context}]")
 
-        # 2. Conversation summary for coherence
-        if self.conversation_summary:
-            context_injection_parts.append(f"[Previous conversation: {self.conversation_summary}]")
-
-        # 3. Last assistant response to avoid repetition
-        if self.last_assistant_response:
-            context_injection_parts.append(f"[You previously said: {self.last_assistant_response[:150]}]")
-
-        # 4. Routing grounding (specific facts for this query)
+        # 2. Routing grounding (specific facts for this query, if any)
         if grounding:
             context_injection_parts.append(grounding)
+
+        # 3. Rich case study context injection when on case study pages
+        active_screen = (self.userdata.active_screen or "/").strip().lower().replace("#", "").replace("/", "")
+        case_study_targets = [
+            "case_study_adaptive_governance",
+            "case_study_regime_supervisory",
+            "case_study_supervisory_xai",
+            "case_study_voice_architecture",
+            "case_study_aqi",
+            "case_study_swarm_robotics",
+        ]
+        
+        if active_screen in case_study_targets:
+            # Inject detailed case study knowledge for perfect answers
+            case_study_context = build_publication_context_prompt(active_screen)
+            project_context = build_project_context_prompt(active_screen)
+            section_context = build_section_context_prompt(active_screen)
+            
+            if case_study_context:
+                context_injection_parts.append(case_study_context)
+            if project_context:
+                context_injection_parts.append(project_context)
+            if section_context:
+                context_injection_parts.append(section_context)
+
+        # 4. Navigation hint when section or navigation intent is detected
+        if "screen navigation to" in user_exp.lower() or "navigate" in user_intent.lower() or "referencing portfolio section" in user_intent.lower():
+            context_injection_parts.append("[If showing this section, call navigate_portfolio(target)]")
 
         # 5. Mode guidance
         context_injection_parts.append(f"[Response mode: {mode} — {'under 20 words' if mode == 'short' else '45-70 words, key result first'}]")
 
         full_context = "\n".join(context_injection_parts)
+
+        # Strip prior ephemeral turn context injections so system prompts don't accumulate in chat history
+        turn_ctx.items = [
+            item for item in turn_ctx.items
+            if not (
+                hasattr(item, "role") and item.role == "system" and
+                hasattr(item, "text_content") and "[Current Screen:" in (item.text_content or "")
+            )
+        ]
         turn_ctx.add_message(role="system", content=full_context)
 
         self._clean_extra(turn_ctx)
 
-        # Keep more context for conversation continuity (8 items = 4 exchanges)
-        if len(turn_ctx.items) > 8:
-            turn_ctx.truncate(max_items=8)
+        # Keep context bounded (4 items = 2 exchanges) to eliminate token rate limit issues
+        if len(turn_ctx.items) > 4:
+            turn_ctx.truncate(max_items=4)
 
         elapsed_ms = (time.time() - start_time) * 1000.0
 
@@ -222,15 +277,13 @@ class PortfolioBaseAgent(Agent):
     def update_conversation_summary(self, user_query: str, assistant_response: str) -> None:
         """Update rolling conversation summary for context coherence."""
         self.last_assistant_response = assistant_response
-        # Simple rolling summary - in production could use LLM to summarize
         exchange = f"Q: {user_query[:80]}... A: {assistant_response[:80]}..."
         if self.conversation_summary:
             self.conversation_summary = f"{self.conversation_summary} | {exchange}"
         else:
             self.conversation_summary = exchange
-        # Keep summary bounded
-        if len(self.conversation_summary) > 500:
-            self.conversation_summary = self.conversation_summary[-500:]
+        if len(self.conversation_summary) > 300:
+            self.conversation_summary = self.conversation_summary[-300:]
 
     async def on_user_turn_exceeded(self, ev: UserTurnExceededEvent) -> None:
         """Polite interrupt handling for prolonged visitor turns."""
@@ -264,7 +317,7 @@ class PortfolioBaseAgent(Agent):
         # Update conversation summary with this exchange
         if response_text.strip() and self.last_user_query:
             self.update_conversation_summary(self.last_user_query, response_text.strip())
-            
+
             # LOG: Agent response
             print(f"\n{'='*60}")
             print(f"🤖 AGENT ({self.agent_name}): {response_text.strip()}")

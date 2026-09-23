@@ -15,7 +15,7 @@ async def broadcast_navigation(room: rtc.Room | None, target: str) -> str:
     if room and hasattr(room, "local_participant") and room.local_participant:
         try:
             payload = json.dumps({"type": "navigate", "target": target})
-            await room.local_participant.publish_data(payload.encode("utf-8"), topic="navigation")
+            await room.local_participant.publish_data(payload.encode("utf-8"), reliable=True, topic="navigation")
             print(f"--> [Agent Data Channel] Published navigation packet for '{target}' successfully.")
             return f"Successfully navigated screen to {target}."
         except Exception as e:
@@ -24,9 +24,6 @@ async def broadcast_navigation(room: rtc.Room | None, target: str) -> str:
 
     print(f"--> [Agent Warning] No active room participant found to publish navigation.")
     return f"Navigation requested for {target}."
-
-
-from prompts.knowledge.pages import get_formatted_section_explanation
 
 
 class NavigationToolset(llm.Toolset):
@@ -48,8 +45,7 @@ class NavigationToolset(llm.Toolset):
             room = get_room()
             clean_target = target.strip().lower().replace("#", "")
             await broadcast_navigation(room, clean_target)
-            explanation = get_formatted_section_explanation(clean_target)
-            return f"Navigated screen to {clean_target}. Details: {explanation}"
+            return f"Successfully navigated screen to {clean_target}."
 
         super().__init__(id="navigation", tools=[navigate_portfolio])
 

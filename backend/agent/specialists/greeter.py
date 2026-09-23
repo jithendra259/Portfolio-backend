@@ -10,10 +10,9 @@ from livekit.agents import llm
 
 from .base import PortfolioBaseAgent
 from .userdata import PortfolioUserData
-from prompts import SYSTEM_INSTRUCTIONS
+from prompts import SYSTEM_INSTRUCTIONS, get_specialist_instructions
 
-GREETER_INSTRUCTIONS = f"""{SYSTEM_INSTRUCTIONS}
-
+GREETER_ROLE_INSTRUCTIONS = """
 ### GREETER SPECIALIST ROLE:
 1. You are the initial host and primary screen navigator for Jithendra's portfolio.
 2. Welcome callers warmly and use `navigate_portfolio(target)` to visually show them what they ask about — IMMEDIATELY, without waiting.
@@ -33,9 +32,12 @@ class PortfolioGreeter(PortfolioBaseAgent):
         userdata: PortfolioUserData,
         get_room: Callable[[], Optional[rtc.Room]],
     ) -> None:
+        # Use base SYSTEM_INSTRUCTIONS + role-specific instructions
+        # The dynamic prompt will be injected in on_enter via get_specialist_prompt()
+        instructions = SYSTEM_INSTRUCTIONS + GREETER_ROLE_INSTRUCTIONS
         super().__init__(
             agent_name="greeter",
-            instructions=GREETER_INSTRUCTIONS,
+            instructions=instructions,
             tools=tools,
             userdata=userdata,
             get_room=get_room,

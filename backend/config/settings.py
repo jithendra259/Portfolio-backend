@@ -25,24 +25,28 @@ class Settings:
     GROQ_TTS_MODEL: str = os.getenv("GROQ_TTS_MODEL", "canopylabs/orpheus-v1-english")
     GROQ_TTS_VOICE: str = os.getenv("GROQ_TTS_VOICE", "autumn")
 
+    # Deepgram TTS Configuration (Sub-200ms, high reliability, zero 429 rate-limiting)
+    DEEPGRAM_TTS_MODEL: str = os.getenv("DEEPGRAM_TTS_MODEL", "aura-asteria-en")
+
     # Google Gemini fallback (direct Google API, not LiveKit Inference)
     GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "").strip("\"' \t\r\n")
     FALLBACK_MODEL: str = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.5-flash")
-    LLM_ATTEMPT_TIMEOUT: float = 5.0
+    LLM_ATTEMPT_TIMEOUT: float = 18.0  # Allows auto-backoff token bucket replenishment
     LLM_MAX_RETRY: int = 1
 
     # Direct provider audio credentials. These bypass LiveKit Inference quotas.
     DEEPGRAM_API_KEY: str = os.getenv("DEEPGRAM_API_KEY", "").strip("\"' \t\r\n")
     CARTESIA_API_KEY: str = os.getenv("CARTESIA_API_KEY", "").strip("\"' \t\r\n")
 
-    # Speech-To-Text / Text-To-Speech
-    STT_MODEL: str = "whisper-large-v3"
-    STT_LANGUAGE: str = "en"
+    # Speech-To-Text (Deepgram Nova-3 streaming)
+    STT_MODEL: str = os.getenv("STT_MODEL", "nova-3")
+    STT_LANGUAGE: str = os.getenv("STT_LANGUAGE", "en")
 
     # Turn Detection & Latency Tuning
-    TURN_DETECTOR_VERSION: str = "v1"
-    MIN_ENDPOINTING_DELAY: float = 0.5
-    MAX_ENDPOINTING_DELAY: float = 3.0
+    # 'v1-mini' runs locally on CPU with 0ms network latency; 'v1' is Cloud inference
+    TURN_DETECTOR_VERSION: str = os.getenv("TURN_DETECTOR_VERSION", "v1-mini")
+    MIN_ENDPOINTING_DELAY: float = 0.85  # Prevents early turn commits on short pauses
+    MAX_ENDPOINTING_DELAY: float = 3.5
     USER_TURN_MAX_WORDS: int = 50
     USER_TURN_MAX_DURATION: float = 25.0
     USER_AWAY_TIMEOUT: float = 25.0

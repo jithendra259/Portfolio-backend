@@ -1,3 +1,4 @@
+import asyncio
 import ssl
 from typing import Any, Optional
 import certifi
@@ -11,8 +12,7 @@ from config import settings
 _CACHED_SSL_CONTEXT: Optional[ssl.SSLContext] = None
 _CACHED_HTTPX_CLIENT: Optional[httpx.AsyncClient] = None
 _CACHED_GROQ_CLIENT: Optional[openai.AsyncClient] = None
-_CACHED_GROQ_LLM: Optional[lk_openai.LLM] = None
-_CACHED_GEMINI_FALLBACK: Optional[google.LLM] = None
+_CACHED_PROVIDERS: Optional[list[llm.LLM]] = None
 
 
 def get_ssl_context() -> ssl.SSLContext:
@@ -70,7 +70,7 @@ def _sanitize_groq_messages(messages: list[Any]) -> list[dict[str, Any]]:
 
 
 def get_groq_client() -> openai.AsyncClient:
-    """Returns a singleton OpenAI client pre-configured with Groq and request sanitization."""
+    """Returns a singleton OpenAI client pre-configured with Groq, request sanitization, and TPM recovery."""
     global _CACHED_GROQ_CLIENT
     if _CACHED_GROQ_CLIENT is None:
         client = openai.AsyncClient(
@@ -84,48 +84,102 @@ def get_groq_client() -> openai.AsyncClient:
         async def sanitized_create(*args, **kwargs):
             if "messages" in kwargs and isinstance(kwargs["messages"], list):
                 kwargs["messages"] = _sanitize_groq_messages(kwargs["messages"])
-            return await orig_create(*args, **kwargs)
+            try:
+                return await orig_create(*args, **kwargs)
+            except Exception as exc:
+                err_str = str(exc)
+                if "429" in err_str or "rate_limit" in err_str.lower() or "too many requests" in err_str.lower():
+                    if "tpd" in err_str.lower() or "tokens per day" in err_str.lower():
+                        raise
+                    delay = 2.0
+                    try:
+                        if "try again in " in err_str:
+                            part = err_str.split("try again in ")[1].split("s")[0]
+                            delay = min(max(float(part) + 0.3, 1.0), 5.0)
+                    except Exception:
+                        pass
+                    await asyncio.sleep(delay)
+                    return await orig_create(*args, **kwargs)
+                raise
 
         client.chat.completions.create = sanitized_create
         _CACHED_GROQ_CLIENT = client
     return _CACHED_GROQ_CLIENT
 
 
+def get_fallback_models() -> list[llm.LLM]:
+    """
+    Constructs an ultra-resilient multi-tier fallback LLM cascade across all available models:
+    1. Primary: Groq Qwen 3.8 27B (sub-100ms ultra-low latency, fresh quota).
+    2. Fallback 1: Groq GPT-OSS 120B (high reasoning capacity on Groq LPU).
+    3. Fallback 2: Groq GPT-OSS 20B (fast lightweight model on Groq LPU).
+    4. Fallback 3: Google Gemini 2.5 Flash (direct Google API).
+    5. Fallback 4: Google Gemini 2.5 Pro (complex reasoning fallback).
+    """
+    global _CACHED_PROVIDERS
+    if _CACHED_PROVIDERS is not None:
+        return _CACHED_PROVIDERS
+
+    providers: list[llm.LLM] = []
+
+    # 1. Groq LPU Models (Sub-100ms primary & secondary tiers)
+    if settings.GROQ_API_KEY:
+        groq_client = get_groq_client()
+        groq_models = [
+            settings.GROQ_MODEL,        # Default: qwen/qwen3.8-27b
+            "openai/gpt-oss-120b",      # Fallback: 120B parameter model
+            "openai/gpt-oss-20b",       # Fallback: 20B parameter model
+        ]
+        seen_groq = set()
+        for m in groq_models:
+            if m and m not in seen_groq:
+                seen_groq.add(m)
+                providers.append(
+                    lk_openai.LLM(
+                        model=m,
+                        client=groq_client,
+                        max_completion_tokens=settings.GROQ_MAX_TOKENS,
+                        temperature=settings.GROQ_TEMPERATURE,
+                    )
+                )
+
+    # 2. Google Gemini Models (Direct Google API fallback tiers)
+    if settings.GOOGLE_API_KEY:
+        gemini_models = [
+            settings.FALLBACK_MODEL,    # Default: gemini-2.5-flash
+            "gemini-2.5-pro",           # Fallback: deep analytical model
+        ]
+        seen_gemini = set()
+        for m in gemini_models:
+            if m and m not in seen_gemini:
+                seen_gemini.add(m)
+                providers.append(
+                    google.LLM(
+                        model=m,
+                        api_key=settings.GOOGLE_API_KEY,
+                        temperature=settings.GROQ_TEMPERATURE,
+                        max_output_tokens=settings.GROQ_MAX_TOKENS,
+                    )
+                )
+
+    _CACHED_PROVIDERS = providers
+    return _CACHED_PROVIDERS
+
+
 def build_llm_pipeline() -> llm.LLM:
     """
-    Constructs a fault-tolerant, high-performance LLM pipeline:
-    1. Primary: Groq LPU with automatic message sanitization (sub-100ms TTFT).
-    2. Fallback: Google Gemini 2.5 Flash via the direct Google API.
-    Reuses pre-warmed singleton clients to ensure 0ms event loop stall on session init.
+    Constructs a fault-tolerant LLM pipeline with all available models as fallbacks.
+    Cascades seamlessly from Groq LPU models to Gemini direct API models.
     """
-    global _CACHED_GROQ_LLM, _CACHED_GEMINI_FALLBACK
+    providers = get_fallback_models()
+    if not providers:
+        raise RuntimeError("Set GROQ_API_KEY or GOOGLE_API_KEY to start the voice agent.")
 
-    if _CACHED_GEMINI_FALLBACK is None and settings.GOOGLE_API_KEY:
-        _CACHED_GEMINI_FALLBACK = google.LLM(
-            model=settings.FALLBACK_MODEL,
-            api_key=settings.GOOGLE_API_KEY,
-            temperature=settings.GROQ_TEMPERATURE,
-            max_output_tokens=settings.GROQ_MAX_TOKENS,
-        )
+    if len(providers) == 1:
+        return providers[0]
 
-    if settings.GROQ_API_KEY:
-        if _CACHED_GROQ_LLM is None:
-            _CACHED_GROQ_LLM = lk_openai.LLM(
-                model=settings.GROQ_MODEL,
-                client=get_groq_client(),
-                max_completion_tokens=settings.GROQ_MAX_TOKENS,
-                temperature=settings.GROQ_TEMPERATURE,
-            )
-        providers: list[llm.LLM] = [_CACHED_GROQ_LLM]
-        if _CACHED_GEMINI_FALLBACK is not None:
-            providers.append(_CACHED_GEMINI_FALLBACK)
-        return llm.FallbackAdapter(
-            providers,
-            attempt_timeout=settings.LLM_ATTEMPT_TIMEOUT,
-            max_retry_per_llm=settings.LLM_MAX_RETRY,
-        )
-
-    if _CACHED_GEMINI_FALLBACK is not None:
-        return _CACHED_GEMINI_FALLBACK
-
-    raise RuntimeError("Set GROQ_API_KEY or GOOGLE_API_KEY to start the voice agent.")
+    return llm.FallbackAdapter(
+        providers,
+        attempt_timeout=settings.LLM_ATTEMPT_TIMEOUT,
+        max_retry_per_llm=settings.LLM_MAX_RETRY,
+    )
