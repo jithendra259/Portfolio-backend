@@ -44,5 +44,7 @@ for _info_lib in ("asyncio", "supabase_logger"):
     logging.getLogger(_info_lib).setLevel(logging.INFO)
 
 if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        sys.argv.append("start")
     agents.cli.run_app(server)
 
