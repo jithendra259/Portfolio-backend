@@ -146,28 +146,30 @@ PROJECTS = [
 ]
 
 TECHNICAL_SKILLS = {
-    "AI & Multi-Agent Swarms": [
-        "LangGraph", "LangChain", "Multi-Agent Blackboards", "DAG Workflows",
-        "RAG", "Numerical Grounding", "Tool Calling",
+    "AI, ML & Research": [
+        "Artificial Intelligence", "Machine Learning", "Deep Learning", "Agentic AI",
+        "Multi-Agent Systems", "Explainable AI", "Retrieval-Augmented Generation", "Prompt Engineering",
     ],
-    "LLMs & Real-time Voice": [
-        "Groq LPU", "Google Gemini", "Mistral-7B", "Llama-3",
-        "LiveKit WebRTC", "Deepgram Nova-3", "Cartesia Sonic-3",
+    "Finance & Optimization": [
+        "Quantitative Finance", "Portfolio Optimization", "CVaR", "Drawdown", "Volatility",
+        "RSI", "MACD", "Bollinger Bands", "Market Regime Detection", "Compliance-Aware AI",
     ],
-    "Machine Learning & Data Science": [
-        "PyTorch", "TensorFlow", "Scikit-Learn", "XGBoost", "ARIMA",
-        "Markov Chains", "Hugging Face", "OpenCV",
+    "Agentic AI & LLM Tools": [
+        "LangChain", "LangGraph", "Groq", "Ollama", "Mistral-7B",
+        "Agent Memory", "Verification Frameworks", "Audit Logging", "Source Grounding",
     ],
-    "Quantitative Finance & Optimization": [
-        "Convex Optimization (CVXPY)", "CLARABEL solver", "Conditional Value-at-Risk (CVaR)",
-        "Ledoit-Wolf Shrinkage", "Bipartite Institutional Networks", "Eigenvector Centrality", "NetworkX",
+    "Voice AI & Real-Time Systems": [
+        "LiveKit", "WebRTC", "Deepgram (STT)", "ElevenLabs (TTS)",
+        "Real-Time Data Channels", "Sub-500ms Conversational Pipelines",
     ],
-    "Full-Stack Web Engineering": [
-        "Next.js 15 (App Router)", "React 19", "TypeScript", "JavaScript",
-        "TailwindCSS", "Node.js", "FastAPI", "Flask", "MongoDB", "WebSockets", "WebRTC",
+    "Optimization & Graph Tools": [
+        "CVXPY", "CLARABEL", "NetworkX", "Risk-Aware Portfolio Construction", "Graph-Based Reasoning",
     ],
-    "Embedded Systems & IoT": [
-        "ESP32", "ESP-NOW Mesh", "Sensor Networks", "MicroPython", "Arduino", "Embedded C++",
+    "Programming & Data": [
+        "Python", "NumPy", "Pandas", "SciPy", "Scikit-learn", "SQL", "MongoDB", "Supabase", "Git", "GitHub",
+    ],
+    "Full-Stack Development": [
+        "React", "Next.js", "TypeScript", "JavaScript", "Flask", "REST APIs", "HTML", "CSS", "Gradio", "AQICN API",
     ],
 }
 
